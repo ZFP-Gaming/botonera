@@ -1,4 +1,10 @@
 require('dotenv').config();
+
+if (typeof ReadableStream === 'undefined') {
+  const { ReadableStream } = require('stream/web');
+  global.ReadableStream = ReadableStream;
+}
+
 const fs = require('fs');
 const path = require('path');
 const { WebSocketServer, WebSocket } = require('ws');
