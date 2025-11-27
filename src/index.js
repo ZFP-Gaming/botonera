@@ -1,5 +1,10 @@
 require('dotenv').config();
 
+// Use built-in fetch on Node 18+, fallback to node-fetch on older runtimes.
+const fetch =
+  global.fetch ||
+  ((...args) => import('node-fetch').then(({ default: fn }) => fn(...args)));
+
 if (typeof ReadableStream === 'undefined') {
   const { ReadableStream } = require('stream/web');
   global.ReadableStream = ReadableStream;
