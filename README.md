@@ -1,34 +1,32 @@
-# Bot de Discord con `/join`
+# Discord bot + React soundboard
 
-Bot sencillo en JavaScript que registra _slash commands_ `/join` (conectarse) y `/leave` (desconectarse) al canal de voz.
+Simple JavaScript Discord bot with slash commands `/join` and `/leave`. A local React app connects over WebSocket, lists files from the `sounds/` folder, and triggers playback in the connected voice channel.
 
-## Requisitos
+## Requirements
 - Node.js 18+
-- Un bot creado en el [Portal de Desarrolladores de Discord](https://discord.com/developers/applications) con los intents de **Guilds** y **Guild Voice States** habilitados.
-- Invitar el bot con permiso `CONNECT` y `SPEAK` en el servidor.
+- Discord bot with **Guilds** and **Guild Voice States** intents enabled, invited with `CONNECT` and `SPEAK`.
 
-Configura estas variables de entorno antes de iniciar:
-- `DISCORD_TOKEN`: token del bot.
-- `DISCORD_CLIENT_ID`: ID de la aplicación/bot.
-- `DISCORD_GUILD_ID`: ID del servidor donde quieres registrar el comando.
+Environment variables (`.env`):
+- `DISCORD_TOKEN`: bot token
+- `DISCORD_CLIENT_ID`: application/bot ID
+- `DISCORD_GUILD_ID`: target guild where commands are registered
+- `WS_PORT`: WebSocket port for the control UI (default `3001`)
 
-Puedes guardarlas en un `.env` y exportarlas en tu shell:
-
-```bash
-export DISCORD_TOKEN=tu_token
-export DISCORD_CLIENT_ID=tu_client_id
-export DISCORD_GUILD_ID=tu_guild_id
-```
-
-## Instalar dependencias
+## Backend (bot + WebSocket)
+Install and run from repo root:
 ```bash
 npm install
-```
-
-## Ejecutar
-Inicia el bot (registra el comando en el servidor y luego conecta):
-```bash
 npm start
 ```
 
-En tu servidor usa `/join` mientras estás en un canal de voz para que el bot entre, y `/leave` para sacarlo.
+Use `/join` in Discord while you are in a voice channel so the bot connects. The bot exposes a WebSocket at `ws://localhost:${WS_PORT}` that the React UI uses to list and play sounds.
+
+## Frontend (React)
+The UI lives in `web/` and talks to the bot over WebSocket.
+```bash
+cd web
+npm install
+npm run dev -- --host
+```
+
+Open the printed URL (default `http://localhost:5173`). Buttons map to files inside `sounds/`; clicking sends `{ type: "play", name: "<file>" }` over WebSocket. You can override the WS endpoint with `VITE_WS_URL=ws://host:port npm run dev`.
