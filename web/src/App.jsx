@@ -7,6 +7,7 @@ export default function App() {
   const [connectionState, setConnectionState] = useState('disconnected');
   const [nowPlaying, setNowPlaying] = useState(null);
   const [error, setError] = useState(null);
+  const [query, setQuery] = useState('');
   const socketRef = useRef(null);
 
   const statusLabel = useMemo(() => {
@@ -71,6 +72,14 @@ export default function App() {
     socketRef.current.send(JSON.stringify({ type: 'play', name }));
   };
 
+  const filteredSounds = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sounds;
+    return sounds.filter((sound) => sound.toLowerCase().includes(q));
+  }, [sounds, query]);
+
+  const palette = ['tone-cyan', 'tone-purple', 'tone-green', 'tone-red'];
+
   return (
     <div className="app">
       <header className="header">
@@ -91,11 +100,25 @@ export default function App() {
 
       {error && <div className="error">{error}</div>}
 
+      <div className="toolbar">
+        <div className="search">
+          <input
+            type="search"
+            placeholder="Search sounds..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <span className="search-count">
+            {filteredSounds.length} / {sounds.length}
+          </span>
+        </div>
+      </div>
+
       <section className="grid">
-        {sounds.map((sound) => (
+        {filteredSounds.map((sound, idx) => (
           <button
             key={sound}
-            className="sound-button"
+            className={`sound-button ${palette[idx % palette.length]}`}
             onClick={() => sendPlay(sound)}
             disabled={connectionState === 'disconnected' || connectionState === 'connecting'}
             title={sound}

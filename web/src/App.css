@@ -110,33 +110,81 @@ h1 {
   margin-bottom: 16px;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
-}
-
-.sound-button {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
-  color: #f7f7f7;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 16px;
-  text-align: left;
-  cursor: pointer;
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+.toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin: 12px 0 16px;
+}
+
+.search {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 4px 10px 4px 12px;
+  gap: 8px;
+}
+
+.search input {
+  background: transparent;
+  border: none;
+  color: #f7f7f7;
+  outline: none;
+  min-width: 200px;
+  font-size: 14px;
+}
+
+.search input::placeholder {
+  color: #9fb3ff;
+}
+
+.search-count {
+  font-size: 12px;
+  color: #cbd2e0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.sound-button {
+  position: relative;
+  color: #f7f7f7;
+  border: none;
+  border-radius: 18px;
+  padding: 18px 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.35),
+    0 8px 18px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
 }
 
 .sound-button:hover {
-  transform: translateY(-2px);
-  border-color: rgba(159, 179, 255, 0.7);
+  transform: translateY(-3px);
+  filter: brightness(1.05);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -3px 10px rgba(0, 0, 0, 0.45),
+    0 12px 22px rgba(0, 0, 0, 0.4);
 }
 
 .sound-button:active {
   transform: translateY(0);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.45),
+    0 6px 12px rgba(0, 0, 0, 0.35);
 }
 
 .sound-button:disabled {
@@ -151,9 +199,38 @@ h1 {
 
 .sound-ext {
   font-size: 12px;
-  color: #9fb3ff;
+  color: rgba(255, 255, 255, 0.8);
   text-transform: uppercase;
   letter-spacing: 0.1em;
+}
+
+.sound-button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.4), transparent 45%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.tone-cyan {
+  background: linear-gradient(145deg, #2bbfe2, #1186c5);
+  border: 1px solid rgba(46, 181, 230, 0.7);
+}
+
+.tone-purple {
+  background: linear-gradient(145deg, #6f67ff, #4b3fa6);
+  border: 1px solid rgba(111, 103, 255, 0.7);
+}
+
+.tone-green {
+  background: linear-gradient(145deg, #5dd39e, #2f9e61);
+  border: 1px solid rgba(93, 211, 158, 0.7);
+}
+
+.tone-red {
+  background: linear-gradient(145deg, #f94f6b, #c01834);
+  border: 1px solid rgba(249, 79, 107, 0.7);
 }
 
 .empty {
