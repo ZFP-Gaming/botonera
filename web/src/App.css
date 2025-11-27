@@ -236,6 +236,53 @@ h1 {
   gap: 16px;
 }
 
+.favorites {
+  margin: 12px 0 24px;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.favorites-grid {
+  margin-top: 12px;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 18px 0;
+}
+
+.page-indicator {
+  color: #cbd2e0;
+  font-weight: 600;
+}
+
+.icon-button {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.section-count {
+  margin: 0;
+  color: #cbd2e0;
+}
+
 .sound-button {
   position: relative;
   color: #f7f7f7;
@@ -282,13 +329,6 @@ h1 {
   font-size: 16px;
 }
 
-.sound-ext {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.8);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
 .sound-button::after {
   content: '';
   position: absolute;
@@ -296,6 +336,28 @@ h1 {
   background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.4), transparent 45%);
   mix-blend-mode: screen;
   pointer-events: none;
+}
+
+.favorite-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.favorite-toggle:hover {
+  transform: scale(1.05);
+  filter: brightness(1.1);
 }
 
 .tone-cyan {
@@ -408,6 +470,22 @@ img.history-avatar {
   color: #cbd2e0;
 }
 
+.history-icon {
+  vertical-align: middle;
+  margin-right: 6px;
+  color: #9fb3ff;
+}
+
+.favorite-icon {
+  color: #f5b7ff;
+}
+
+.fav-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .empty-history {
   margin: 10px 0 0;
   color: #cbd2e0;
@@ -429,4 +507,20 @@ img.history-avatar {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.empty-favorites {
+  margin: 8px 0 0;
+  color: #cbd2e0;
 }

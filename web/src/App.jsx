@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  CaretDoubleLeft,
+  CaretDoubleRight,
+  CaretLeft,
+  CaretRight,
+  Heart,
+  SpeakerHigh,
+} from '@phosphor-icons/react';
 
 const defaultWsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001';
 const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const PAGE_SIZE = 24;
+const HISTORY_PAGE_SIZE = 12;
 
 export default function App() {
   const [sounds, setSounds] = useState([]);
@@ -27,6 +37,16 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(() => Boolean(
     typeof window !== 'undefined' && localStorage.getItem('sessionToken'),
   ));
+  const [historyPage, setHistoryPage] = useState(1);
+  const [favorites, setFavorites] = useState(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = JSON.parse(localStorage.getItem('favoriteSounds') || '[]');
+      return Array.isArray(stored) ? stored : [];
+    } catch (_err) {
+      return [];
+    }
+  });
   const socketRef = useRef(null);
   const loginWindowRef = useRef(null);
 
@@ -83,6 +103,7 @@ export default function App() {
             break;
           case 'history':
             setHistory(payload.entries || []);
+            setHistoryPage(1);
             break;
           case 'error':
             setError(payload.message || 'Unexpected error');
@@ -177,11 +198,57 @@ export default function App() {
     socketRef.current.send(JSON.stringify({ type: 'play', name, token: sessionToken }));
   };
 
-  const filteredSounds = useMemo(() => {
+  const favoriteSounds = useMemo(
+    () => sounds.filter((sound) => favorites.includes(sound)),
+    [sounds, favorites],
+  );
+
+  const nonFavoriteSounds = useMemo(
+    () => sounds.filter((sound) => !favorites.includes(sound)),
+    [sounds, favorites],
+  );
+
+  const filteredFavorites = favoriteSounds;
+
+  const filteredNonFavorites = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return sounds;
-    return sounds.filter((sound) => sound.toLowerCase().includes(q));
-  }, [sounds, query]);
+    if (!q) return nonFavoriteSounds;
+    return nonFavoriteSounds.filter((sound) => sound.toLowerCase().includes(q));
+  }, [nonFavoriteSounds, query]);
+
+  const filteredTotalCount = favoriteSounds.length + filteredNonFavorites.length;
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(filteredNonFavorites.length / PAGE_SIZE));
+  const paginatedNonFavorites = filteredNonFavorites.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
+  const historyTotalPages = Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE));
+  const paginatedHistory = useMemo(
+    () =>
+      history.slice(
+        (historyPage - 1) * HISTORY_PAGE_SIZE,
+        historyPage * HISTORY_PAGE_SIZE,
+      ),
+    [history, historyPage],
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('favoriteSounds', JSON.stringify(favorites));
+  }, [favorites]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query]);
+
+  useEffect(() => {
+    setPage((prev) => Math.min(prev, totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    setHistoryPage((prev) => Math.min(prev, historyTotalPages));
+  }, [historyTotalPages]);
 
   const beginLogin = () => {
     const features = 'width=520,height=720,menubar=no,location=no,status=no';
@@ -193,6 +260,13 @@ export default function App() {
     setUser(null);
     localStorage.removeItem('sessionToken');
     localStorage.removeItem('sessionUser');
+  };
+
+  const toggleFavorite = (event, sound) => {
+    event.stopPropagation();
+    setFavorites((prev) =>
+      prev.includes(sound) ? prev.filter((s) => s !== sound) : [...prev, sound],
+    );
   };
 
   const historyLabel = (entry) => {
@@ -271,13 +345,66 @@ export default function App() {
                 onChange={(e) => setQuery(e.target.value)}
               />
               <span className="search-count">
-                {filteredSounds.length} / {sounds.length}
+                {filteredTotalCount} / {sounds.length}
               </span>
             </div>
           </div>
 
+          {favorites.length > 0 && (
+            <section className="favorites">
+              <div className="section-header">
+                <div>
+                  <p className="eyebrow">Favoritos</p>
+                </div>
+                <p className="section-count">
+                  {filteredFavorites.length} / {favoriteSounds.length}
+                </p>
+              </div>
+              {filteredFavorites.length ? (
+                <div className="grid favorites-grid">
+                  {filteredFavorites.map((sound, idx) => (
+                    <button
+                      key={sound}
+                      className={`sound-button ${palette[idx % palette.length]}`}
+                      onClick={() => sendPlay(sound)}
+                      disabled={
+                        connectionState === 'disconnected' || connectionState === 'connecting'
+                      }
+                      title={sound}
+                    >
+                      <span
+                        className="favorite-toggle"
+                        onClick={(e) => toggleFavorite(e, sound)}
+                        title={
+                          favorites.includes(sound)
+                            ? 'Quitar de favoritos'
+                            : 'Agregar a favoritos'
+                        }
+                      >
+                        <Heart
+                          size={18}
+                          weight={favorites.includes(sound) ? 'fill' : 'regular'}
+                          className="favorite-icon"
+                          aria-hidden
+                        />
+                        <span className="sr-only">
+                          {favorites.includes(sound)
+                            ? 'Quitar de favoritos'
+                            : 'Agregar a favoritos'}
+                        </span>
+                      </span>
+                      <span className="sound-name">{sound.replace(/\.[^/.]+$/, '')}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="empty-favorites">No hay favoritos que coincidan con la búsqueda.</p>
+              )}
+            </section>
+          )}
+
           <section className="grid">
-            {filteredSounds.map((sound, idx) => (
+            {paginatedNonFavorites.map((sound, idx) => (
               <button
                 key={sound}
                 className={`sound-button ${palette[idx % palette.length]}`}
@@ -285,19 +412,88 @@ export default function App() {
                 disabled={connectionState === 'disconnected' || connectionState === 'connecting'}
                 title={sound}
               >
+                <span
+                  className="favorite-toggle"
+                  onClick={(e) => toggleFavorite(e, sound)}
+                  title={
+                    favorites.includes(sound)
+                      ? 'Quitar de favoritos'
+                      : 'Agregar a favoritos'
+                  }
+                >
+                  <Heart
+                    size={18}
+                    weight={favorites.includes(sound) ? 'fill' : 'regular'}
+                    className="favorite-icon"
+                    aria-hidden
+                  />
+                  <span className="sr-only">
+                    {favorites.includes(sound)
+                      ? 'Quitar de favoritos'
+                      : 'Agregar a favoritos'}
+                  </span>
+                </span>
                 <span className="sound-name">{sound.replace(/\.[^/.]+$/, '')}</span>
-                <span className="sound-ext">{sound.split('.').pop()}</span>
               </button>
             ))}
-            {!sounds.length && (
+            {!sounds.length ? (
               <div className="empty">
                 <p>
                   No sounds found in the <code>sounds/</code> folder.
                 </p>
                 <p>Add files (mp3, wav, ogg, flac) and reload.</p>
               </div>
+            ) : null}
+            {sounds.length > 0 && !filteredNonFavorites.length && (
+              <div className="empty">
+                <p>
+                  {query.trim()
+                    ? 'No hay sonidos que coincidan con la búsqueda (fuera de favoritos).'
+                    : 'Todos tus sonidos están marcados como favoritos.'}
+                </p>
+              </div>
             )}
           </section>
+
+          {filteredNonFavorites.length > PAGE_SIZE && (
+            <div className="pagination">
+              <button
+                className="ghost icon-button"
+                onClick={() => setPage(1)}
+                disabled={page === 1}
+                aria-label="Primera página"
+              >
+                <CaretDoubleLeft size={18} />
+              </button>
+              <button
+                className="ghost icon-button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                aria-label="Página anterior"
+              >
+                <CaretLeft size={18} />
+              </button>
+              <span className="page-indicator">
+                Página {page} de {totalPages}
+              </span>
+              <button
+                className="ghost icon-button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                aria-label="Página siguiente"
+              >
+                <CaretRight size={18} />
+              </button>
+              <button
+                className="ghost icon-button"
+                onClick={() => setPage(totalPages)}
+                disabled={page === totalPages}
+                aria-label="Última página"
+              >
+                <CaretDoubleRight size={18} />
+              </button>
+            </div>
+          )}
 
           <section className="history">
             <div className="history-header">
@@ -310,7 +506,7 @@ export default function App() {
             {!history.length && <p className="empty-history">Todavía no hay reproducciones.</p>}
             {history.length > 0 && (
               <ul className="history-list">
-                {history.map((entry) => (
+                {paginatedHistory.map((entry) => (
                   <li key={`${entry.at}-${entry.sound}`}>
                     {avatarUrl(entry.user) ? (
                       <img
@@ -326,12 +522,57 @@ export default function App() {
                     <div className="history-body">
                       <p className="history-user">{entry.user.globalName || entry.user.username}</p>
                       <p className="history-meta">
-                        disparó <strong>{entry.sound}</strong> · {historyLabel(entry)}
+                        <SpeakerHigh
+                          size={18}
+                          weight="fill"
+                          className="history-icon"
+                          aria-label="disparó"
+                        />{' '}
+                        <strong>{entry.sound}</strong> · {historyLabel(entry)}
                       </p>
                     </div>
                   </li>
                 ))}
               </ul>
+            )}
+            {history.length > HISTORY_PAGE_SIZE && (
+              <div className="pagination">
+                <button
+                  className="ghost icon-button"
+                  onClick={() => setHistoryPage(1)}
+                  disabled={historyPage === 1}
+                  aria-label="Primera página de historial"
+                >
+                  <CaretDoubleLeft size={18} />
+                </button>
+                <button
+                  className="ghost icon-button"
+                  onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                  disabled={historyPage === 1}
+                  aria-label="Página anterior de historial"
+                >
+                  <CaretLeft size={18} />
+                </button>
+                <span className="page-indicator">
+                  Página {historyPage} de {historyTotalPages}
+                </span>
+                <button
+                  className="ghost icon-button"
+                  onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
+                  disabled={historyPage === historyTotalPages}
+                  aria-label="Página siguiente de historial"
+                >
+                  <CaretRight size={18} />
+                </button>
+                <button
+                  className="ghost icon-button"
+                  onClick={() => setHistoryPage(historyTotalPages)}
+                  disabled={historyPage === historyTotalPages}
+                  aria-label="Última página de historial"
+                >
+                  <CaretDoubleRight size={18} />
+                </button>
+              </div>
             )}
           </section>
         </>

@@ -14,7 +14,8 @@ Environment variables (`.env`):
 - `WS_PORT`: WebSocket port for the control UI (default `3001`)
 - `HTTP_PORT`: HTTP port for OAuth/login helper (default `3000`)
 - `OAUTH_REDIRECT_URI`: Discord redirect URI (defaults to `http://localhost:${HTTP_PORT}/auth/callback`)
-- `SOUND_DIR`: absolute path to your sounds folder (default `./sounds` in the repo)
+- `SOUND_DIR`: absolute path(s) to your sounds folder. Supports comma-separated list of folders (default `./sounds` in the repo)
+- `HISTORY_LIMIT`: how many history events to retain server-side. `0` keeps everything. Default `200`.
 
 ## Backend (bot + WebSocket)
 Install and run from repo root:

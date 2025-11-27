@@ -27,10 +27,16 @@ const clientId = process.env.DISCORD_CLIENT_ID;
 const guildId = process.env.DISCORD_GUILD_ID;
 const wsPort = Number(process.env.WS_PORT || 3001);
 const httpPort = Number(process.env.HTTP_PORT || 3000);
-const soundDir = path.resolve(process.env.SOUND_DIR || path.join(__dirname, '..', 'sounds'));
 const clientSecret = process.env.DISCORD_CLIENT_SECRET;
 const redirectUri =
   process.env.OAUTH_REDIRECT_URI || `http://localhost:${httpPort}/auth/callback`;
+
+const defaultSoundDir = path.resolve(path.join(__dirname, '..', 'sounds'));
+const soundDirs = (process.env.SOUND_DIR || defaultSoundDir)
+  .split(',')
+  .map((dir) => dir.trim())
+  .filter(Boolean)
+  .map((dir) => path.resolve(dir));
 
 if (!token || !clientId || !guildId || !clientSecret) {
   throw new Error(
@@ -44,7 +50,9 @@ const audioPlayer = createAudioPlayer({
 let nowPlaying = null;
 let wss;
 const actionHistory = [];
-const MAX_HISTORY = 50;
+const historyLimit = Number(process.env.HISTORY_LIMIT);
+const MAX_HISTORY = Number.isFinite(historyLimit) && historyLimit >= 0 ? historyLimit : 200;
+const SOUND_FILE_REGEX = /\.(mp3|wav|ogg|flac)$/i;
 
 const commands = [
   {
@@ -144,14 +152,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 function listSounds() {
   try {
-    return fs
-      .readdirSync(soundDir, { withFileTypes: true })
-      .filter((entry) => entry.isFile())
-      .map((entry) => entry.name)
-      .filter((name) => /\.(mp3|wav|ogg|flac)$/i.test(name))
-      .sort((a, b) => a.localeCompare(b));
+    const seen = new Set();
+    soundDirs.forEach((dir) => {
+      try {
+        fs.readdirSync(dir, { withFileTypes: true }).forEach((entry) => {
+          if (!entry.isFile()) return;
+          if (!SOUND_FILE_REGEX.test(entry.name)) return;
+          if (!seen.has(entry.name)) {
+            seen.add(entry.name);
+          }
+        });
+      } catch (error) {
+        console.error(`Error reading sounds directory ${dir}:`, error);
+      }
+    });
+    return Array.from(seen).sort((a, b) => a.localeCompare(b));
   } catch (error) {
-    console.error('Error reading sounds directory:', error);
+    console.error('Error reading sounds directories:', error);
     return [];
   }
 }
@@ -173,11 +190,21 @@ function playSoundByName(name) {
   }
 
   const safeName = path.basename(name);
-  const filePath = path.join(soundDir, safeName);
-  if (!filePath.startsWith(soundDir)) {
-    throw new Error('Invalid sound name.');
+  let filePath = null;
+
+  for (const dir of soundDirs) {
+    const candidate = path.resolve(dir, safeName);
+    const relative = path.relative(dir, candidate);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      continue;
+    }
+    if (fs.existsSync(candidate)) {
+      filePath = candidate;
+      break;
+    }
   }
-  if (!fs.existsSync(filePath)) {
+
+  if (!filePath) {
     throw new Error('Sound not found.');
   }
 
@@ -219,6 +246,7 @@ function getSession(token) {
 }
 
 function pruneHistory() {
+  if (MAX_HISTORY <= 0) return;
   if (actionHistory.length > MAX_HISTORY) {
     actionHistory.length = MAX_HISTORY;
   }
