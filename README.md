@@ -11,6 +11,7 @@ Environment variables (`.env`):
 - `DISCORD_CLIENT_ID`: application/bot ID
 - `DISCORD_GUILD_ID`: target guild where commands are registered
 - `WS_PORT`: WebSocket port for the control UI (default `3001`)
+- `SOUND_DIR`: absolute path to your sounds folder (default `./sounds` in the repo)
 
 ## Backend (bot + WebSocket)
 Install and run from repo root:

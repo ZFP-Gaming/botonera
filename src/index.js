@@ -24,7 +24,7 @@ const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
 const guildId = process.env.DISCORD_GUILD_ID;
 const wsPort = Number(process.env.WS_PORT || 3001);
-const soundDir = path.join(__dirname, '..', 'sounds');
+const soundDir = path.resolve(process.env.SOUND_DIR || path.join(__dirname, '..', 'sounds'));
 
 if (!token || !clientId || !guildId) {
   throw new Error('Missing env vars DISCORD_TOKEN, DISCORD_CLIENT_ID or DISCORD_GUILD_ID.');
