@@ -5,7 +5,9 @@ if (typeof ReadableStream === 'undefined') {
   global.ReadableStream = ReadableStream;
 }
 
+const crypto = require('crypto');
 const fs = require('fs');
+const http = require('http');
 const path = require('path');
 const { WebSocketServer, WebSocket } = require('ws');
 const { Client, Events, GatewayIntentBits, REST, Routes } = require('discord.js');
@@ -24,10 +26,16 @@ const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
 const guildId = process.env.DISCORD_GUILD_ID;
 const wsPort = Number(process.env.WS_PORT || 3001);
+const httpPort = Number(process.env.HTTP_PORT || 3000);
 const soundDir = path.resolve(process.env.SOUND_DIR || path.join(__dirname, '..', 'sounds'));
+const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+const redirectUri =
+  process.env.OAUTH_REDIRECT_URI || `http://localhost:${httpPort}/auth/callback`;
 
-if (!token || !clientId || !guildId) {
-  throw new Error('Missing env vars DISCORD_TOKEN, DISCORD_CLIENT_ID or DISCORD_GUILD_ID.');
+if (!token || !clientId || !guildId || !clientSecret) {
+  throw new Error(
+    'Missing env vars. Require DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and DISCORD_GUILD_ID.',
+  );
 }
 
 const audioPlayer = createAudioPlayer({
@@ -35,6 +43,9 @@ const audioPlayer = createAudioPlayer({
 });
 let nowPlaying = null;
 let wss;
+const sessions = new Map();
+const actionHistory = [];
+const MAX_HISTORY = 50;
 
 const commands = [
   {
@@ -179,6 +190,34 @@ function playSoundByName(name) {
   return safeName;
 }
 
+function createSession(user) {
+  const token = crypto.randomBytes(24).toString('hex');
+  sessions.set(token, { user, createdAt: Date.now() });
+  return token;
+}
+
+function getSession(token) {
+  if (!token) return null;
+  return sessions.get(token) || null;
+}
+
+function pruneHistory() {
+  if (actionHistory.length > MAX_HISTORY) {
+    actionHistory.length = MAX_HISTORY;
+  }
+}
+
+function formatUserForClient(user) {
+  const discriminator = user.discriminator && user.discriminator !== '0' ? user.discriminator : null;
+  return {
+    id: user.id,
+    username: user.username,
+    globalName: user.global_name || null,
+    discriminator,
+    avatar: user.avatar,
+  };
+}
+
 function handleSocketMessage(socket, message) {
   let parsed;
   try {
@@ -193,9 +232,35 @@ function handleSocketMessage(socket, message) {
       socket.send(JSON.stringify({ type: 'error', message: 'Missing sound name.' }));
       return;
     }
+
+    const session = getSession(parsed.token);
+    if (!session) {
+      socket.send(
+        JSON.stringify({ type: 'error', message: 'Debes iniciar sesión con Discord primero.' }),
+      );
+      return;
+    }
+
     try {
       const sound = playSoundByName(parsed.name);
-      socket.send(JSON.stringify({ type: 'ack', action: 'play', ok: true, name: sound }));
+      const entry = {
+        sound,
+        at: Date.now(),
+        user: formatUserForClient(session.user),
+      };
+      actionHistory.unshift(entry);
+      pruneHistory();
+      broadcast({ type: 'history', entries: actionHistory });
+      socket.send(
+        JSON.stringify({
+          type: 'ack',
+          action: 'play',
+          ok: true,
+          name: sound,
+          user: entry.user,
+          at: entry.at,
+        }),
+      );
     } catch (error) {
       socket.send(JSON.stringify({ type: 'error', message: error.message }));
     }
@@ -223,6 +288,7 @@ function startWebSocketServer() {
       }),
     );
     socket.send(JSON.stringify({ type: 'nowPlaying', name: nowPlaying }));
+    socket.send(JSON.stringify({ type: 'history', entries: actionHistory }));
 
     socket.on('message', (data) => handleSocketMessage(socket, data.toString()));
   });
@@ -242,8 +308,134 @@ audioPlayer.on('error', (error) => {
   broadcast({ type: 'error', message: 'Audio playback failed.' });
 });
 
+async function exchangeCodeForUser(code) {
+  const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri,
+      scope: 'identify',
+    }),
+  });
+
+  if (!tokenRes.ok) {
+    const text = await tokenRes.text();
+    throw new Error(`Discord token exchange failed: ${text}`);
+  }
+
+  const tokenData = await tokenRes.json();
+  const userRes = await fetch('https://discord.com/api/users/@me', {
+    headers: { Authorization: `Bearer ${tokenData.access_token}` },
+  });
+
+  if (!userRes.ok) {
+    const text = await userRes.text();
+    throw new Error(`Discord user fetch failed: ${text}`);
+  }
+
+  return userRes.json();
+}
+
+function respondJson(res, status, payload) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(JSON.stringify(payload));
+}
+
+function startHttpServer() {
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+
+    if (req.method === 'GET' && url.pathname === '/auth/login') {
+      const authorizeUrl = new URL('https://discord.com/api/oauth2/authorize');
+      authorizeUrl.searchParams.set('response_type', 'code');
+      authorizeUrl.searchParams.set('scope', 'identify');
+      authorizeUrl.searchParams.set('client_id', clientId);
+      authorizeUrl.searchParams.set('redirect_uri', redirectUri);
+      authorizeUrl.searchParams.set('prompt', 'consent');
+
+      res.writeHead(302, { Location: authorizeUrl.toString() });
+      res.end();
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/auth/callback') {
+      const code = url.searchParams.get('code');
+      const error = url.searchParams.get('error');
+      if (error) {
+        res.writeHead(400, { 'Content-Type': 'text/html' });
+        res.end(`<p>Discord login failed: ${error}</p>`);
+        return;
+      }
+      if (!code) {
+        res.writeHead(400, { 'Content-Type': 'text/html' });
+        res.end('<p>Missing authorization code.</p>');
+        return;
+      }
+
+      try {
+        const user = await exchangeCodeForUser(code);
+        const token = createSession(user);
+        const safeUser = formatUserForClient(user);
+        const payload = JSON.stringify({ token, user: safeUser });
+        const html = `
+          <!doctype html>
+          <html>
+            <body style="background:#0b0d11;color:#f7f7f7;font-family:Arial;padding:24px;">
+              <h2>Discord login listo</h2>
+              <p>Puedes cerrar esta ventana.</p>
+              <script>
+                (function() {
+                  const payload = ${JSON.stringify(payload)};
+                  if (window.opener) {
+                    window.opener.postMessage(JSON.parse(payload), '*');
+                    window.close();
+                  } else {
+                    document.body.innerHTML += '<pre>' + payload + '</pre>';
+                  }
+                })();
+              </script>
+            </body>
+          </html>
+        `;
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(html);
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'text/html' });
+        res.end(`<p>Error during Discord login: ${err.message}</p>`);
+      }
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/auth/session') {
+      const token = url.searchParams.get('token');
+      const session = getSession(token);
+      if (!session) {
+        respondJson(res, 401, { ok: false, error: 'Invalid session' });
+        return;
+      }
+      respondJson(res, 200, { ok: true, user: formatUserForClient(session.user) });
+      return;
+    }
+
+    respondJson(res, 404, { ok: false, error: 'Not found' });
+  });
+
+  server.listen(httpPort, () => {
+    console.log(`HTTP auth server listening on http://localhost:${httpPort}`);
+    console.log(`Discord redirect URI: ${redirectUri}`);
+  });
+}
+
 async function start() {
   await registerCommands();
+  startHttpServer();
   startWebSocketServer();
   await client.login(token);
 }
