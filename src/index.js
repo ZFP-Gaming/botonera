@@ -43,7 +43,6 @@ const audioPlayer = createAudioPlayer({
 });
 let nowPlaying = null;
 let wss;
-const sessions = new Map();
 const actionHistory = [];
 const MAX_HISTORY = 50;
 
@@ -190,15 +189,33 @@ function playSoundByName(name) {
   return safeName;
 }
 
-function createSession(user) {
-  const token = crypto.randomBytes(24).toString('hex');
-  sessions.set(token, { user, createdAt: Date.now() });
-  return token;
+function signSession(user) {
+  const safeUser = formatUserForClient(user);
+  const payload = JSON.stringify({ user: safeUser, iat: Date.now() });
+  const base = Buffer.from(payload).toString('base64url');
+  const sig = crypto.createHmac('sha256', clientSecret).update(base).digest('base64url');
+  return `${base}.${sig}`;
 }
 
 function getSession(token) {
   if (!token) return null;
-  return sessions.get(token) || null;
+  const [base, sig] = token.split('.');
+  if (!base || !sig) return null;
+  const expected = crypto.createHmac('sha256', clientSecret).update(base).digest('base64url');
+  const sigBuf = Buffer.from(sig);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length) {
+    return null;
+  }
+  if (!crypto.timingSafeEqual(sigBuf, expBuf)) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(Buffer.from(base, 'base64url').toString('utf8'));
+    return { user: parsed.user, createdAt: parsed.iat };
+  } catch (_err) {
+    return null;
+  }
 }
 
 function pruneHistory() {
@@ -208,11 +225,16 @@ function pruneHistory() {
 }
 
 function formatUserForClient(user) {
-  const discriminator = user.discriminator && user.discriminator !== '0' ? user.discriminator : null;
+  const discriminator =
+    (user.discriminator || user.discriminator === 0) && user.discriminator !== '0'
+      ? user.discriminator
+      : user.discriminator === 0
+        ? '0'
+        : null;
   return {
     id: user.id,
     username: user.username,
-    globalName: user.global_name || null,
+    globalName: user.global_name || user.globalName || null,
     discriminator,
     avatar: user.avatar,
   };
@@ -241,11 +263,11 @@ function handleSocketMessage(socket, message) {
       return;
     }
 
-    try {
-      const sound = playSoundByName(parsed.name);
-      const entry = {
-        sound,
-        at: Date.now(),
+      try {
+        const sound = playSoundByName(parsed.name);
+        const entry = {
+          sound,
+          at: Date.now(),
         user: formatUserForClient(session.user),
       };
       actionHistory.unshift(entry);
@@ -279,7 +301,27 @@ function startWebSocketServer() {
   wss = new WebSocketServer({ port: wsPort });
   console.log(`WebSocket server listening on ws://localhost:${wsPort}`);
 
+  // Keep connections alive and clean up dead peers so intermediaries (proxies, gateways)
+  // do not close idle sockets.
+  const heartbeat = setInterval(() => {
+    wss.clients.forEach((socket) => {
+      if (socket.isAlive === false) {
+        socket.terminate();
+        return;
+      }
+      socket.isAlive = false;
+      socket.ping();
+    });
+  }, 30_000);
+
+  wss.on('close', () => clearInterval(heartbeat));
+
   wss.on('connection', (socket) => {
+    socket.isAlive = true;
+    socket.on('pong', () => {
+      socket.isAlive = true;
+    });
+
     socket.send(JSON.stringify({ type: 'sounds', sounds: listSounds() }));
     socket.send(
       JSON.stringify({
@@ -381,7 +423,7 @@ function startHttpServer() {
 
       try {
         const user = await exchangeCodeForUser(code);
-        const token = createSession(user);
+        const token = signSession(user);
         const safeUser = formatUserForClient(user);
         const payload = JSON.stringify({ token, user: safeUser });
         const html = `

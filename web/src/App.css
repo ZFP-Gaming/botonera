@@ -211,6 +211,14 @@ h1 {
   color: #0b0d11;
 }
 
+.avatar-img {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  object-fit: cover;
+  display: block;
+}
+
 .user-label {
   margin: 0;
   color: #9fb3ff;
@@ -377,6 +385,14 @@ code {
   color: #0b0d11;
 }
 
+.history-avatar img,
+img.history-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
 .history-body {
   display: flex;
   flex-direction: column;
@@ -395,4 +411,22 @@ code {
 .empty-history {
   margin: 10px 0 0;
   color: #cbd2e0;
+}
+
+.login-screen {
+  margin: 32px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.login-card {
+  width: min(540px, 100%);
+  padding: 28px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }

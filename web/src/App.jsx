@@ -13,8 +13,20 @@ export default function App() {
     if (typeof window === 'undefined') return null;
     return localStorage.getItem('sessionToken');
   });
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    if (typeof window === 'undefined') return null;
+    const raw = localStorage.getItem('sessionUser');
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (_err) {
+      return null;
+    }
+  });
   const [history, setHistory] = useState([]);
+  const [authLoading, setAuthLoading] = useState(() => Boolean(
+    typeof window !== 'undefined' && localStorage.getItem('sessionToken'),
+  ));
   const socketRef = useRef(null);
   const loginWindowRef = useRef(null);
 
@@ -26,6 +38,18 @@ export default function App() {
   }, [connectionState]);
 
   useEffect(() => {
+    if (!user) {
+      setSounds([]);
+      setHistory([]);
+      setNowPlaying(null);
+      setConnectionState('disconnected');
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+      }
+      return;
+    }
+
     const socket = new WebSocket(defaultWsUrl);
     socketRef.current = socket;
     setConnectionState('connecting');
@@ -72,33 +96,54 @@ export default function App() {
     };
 
     return () => socket.close();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     const token = sessionToken;
-    if (!token) return;
+    if (!token) {
+      setAuthLoading(false);
+      return;
+    }
 
     const controller = new AbortController();
+    setAuthLoading(true);
     fetch(`${apiBase}/auth/session?token=${token}`, { signal: controller.signal })
       .then((res) => {
-        if (!res.ok) throw new Error('bad session');
+        if (res.status === 401) throw new Error('unauthorized');
+        if (!res.ok) throw new Error('session-check-failed');
         return res.json();
       })
       .then((data) => {
         if (data.ok) {
           setUser(data.user);
         } else {
-          throw new Error('session invalid');
+          throw new Error('unauthorized');
         }
       })
-      .catch(() => {
-        localStorage.removeItem('sessionToken');
-        setSessionToken(null);
-        setUser(null);
+      .catch((err) => {
+        if (err.message === 'unauthorized') {
+          localStorage.removeItem('sessionToken');
+          localStorage.removeItem('sessionUser');
+          setSessionToken(null);
+          setUser(null);
+        } else {
+          setError('No se pudo validar la sesión. Intentaremos de nuevo en la siguiente acción.');
+        }
+      })
+      .finally(() => {
+        setAuthLoading(false);
       });
 
     return () => controller.abort();
   }, [sessionToken]);
+
+  useEffect(() => {
+    if (!user) {
+      localStorage.removeItem('sessionUser');
+      return;
+    }
+    localStorage.setItem('sessionUser', JSON.stringify(user));
+  }, [user]);
 
   useEffect(() => {
     const handler = (event) => {
@@ -107,6 +152,7 @@ export default function App() {
       if (payload.token && payload.user) {
         setSessionToken(payload.token);
         localStorage.setItem('sessionToken', payload.token);
+        localStorage.setItem('sessionUser', JSON.stringify(payload.user));
         setUser(payload.user);
         setError(null);
         if (loginWindowRef.current && !loginWindowRef.current.closed) {
@@ -146,12 +192,16 @@ export default function App() {
     setSessionToken(null);
     setUser(null);
     localStorage.removeItem('sessionToken');
+    localStorage.removeItem('sessionUser');
   };
 
   const historyLabel = (entry) => {
     const when = new Date(entry.at);
     return `${when.toLocaleDateString()} ${when.toLocaleTimeString()}`;
   };
+
+  const avatarUrl = (u) =>
+    u?.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=64` : null;
 
   const palette = ['tone-cyan', 'tone-purple', 'tone-green', 'tone-red'];
 
@@ -171,29 +221,17 @@ export default function App() {
             {nowPlaying && <p className="now-playing">Now playing: {nowPlaying}</p>}
           </div>
         </div>
-      </header>
-
-      {error && <div className="error">{error}</div>}
-
-      <div className="toolbar">
-        <div className="search">
-          <input
-            type="search"
-            placeholder="Search sounds..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <span className="search-count">
-            {filteredSounds.length} / {sounds.length}
-          </span>
-        </div>
         <div className="auth">
           {user ? (
             <>
               <div className="user-pill" title={user.id}>
-                <span className="avatar-fallback">
-                  {user.globalName?.[0] || user.username?.[0] || '?'}
-                </span>
+                {avatarUrl(user) ? (
+                  <img className="avatar-img" src={avatarUrl(user)} alt={user.username} />
+                ) : (
+                  <span className="avatar-fallback">
+                    {user.globalName?.[0] || user.username?.[0] || '?'}
+                  </span>
+                )}
                 <div>
                   <p className="user-label">Conectado</p>
                   <p className="user-name">{user.globalName || user.username}</p>
@@ -203,62 +241,101 @@ export default function App() {
                 Salir
               </button>
             </>
-          ) : (
-            <button className="primary" onClick={beginLogin}>
-              Conectar con Discord
+          ) : null}
+        </div>
+      </header>
+
+      {error && <div className="error">{error}</div>}
+
+      {!user ? (
+        <section className="login-screen">
+          <div className="login-card">
+            <p className="eyebrow">Acceso requerido</p>
+            <h2>{authLoading ? 'Restaurando sesión...' : 'Conecta con Discord'}</h2>
+            <p className="subtitle">
+              Inicia sesión para cargar la botonera y registrar quién dispara cada sonido.
+            </p>
+            <button className="primary" onClick={beginLogin} disabled={authLoading}>
+              {authLoading ? 'Verificando...' : 'Conectar con Discord'}
             </button>
-          )}
-        </div>
-      </div>
-
-      <section className="grid">
-        {filteredSounds.map((sound, idx) => (
-          <button
-            key={sound}
-            className={`sound-button ${palette[idx % palette.length]}`}
-            onClick={() => sendPlay(sound)}
-            disabled={connectionState === 'disconnected' || connectionState === 'connecting'}
-            title={sound}
-          >
-            <span className="sound-name">{sound.replace(/\.[^/.]+$/, '')}</span>
-            <span className="sound-ext">{sound.split('.').pop()}</span>
-          </button>
-        ))}
-        {!sounds.length && (
-          <div className="empty">
-            <p>No sounds found in the <code>sounds/</code> folder.</p>
-            <p>Add files (mp3, wav, ogg, flac) and reload.</p>
           </div>
-        )}
-      </section>
-
-      <section className="history">
-        <div className="history-header">
-          <div>
-            <p className="eyebrow">Historial</p>
-            <h2>Últimas reproducciones</h2>
+        </section>
+      ) : (
+        <>
+          <div className="toolbar">
+            <div className="search">
+              <input
+                type="search"
+                placeholder="Search sounds..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <span className="search-count">
+                {filteredSounds.length} / {sounds.length}
+              </span>
+            </div>
           </div>
-          <p className="history-count">{history.length} eventos</p>
-        </div>
-        {!history.length && <p className="empty-history">Todavía no hay reproducciones.</p>}
-        {history.length > 0 && (
-          <ul className="history-list">
-            {history.map((entry) => (
-              <li key={`${entry.at}-${entry.sound}`}>
-                <div className="history-avatar">
-                  {entry.user.globalName?.[0] || entry.user.username?.[0] || '?'}
-                </div>
-                <div className="history-body">
-                  <p className="history-user">{entry.user.globalName || entry.user.username}</p>
-                  <p className="history-meta">
-                    disparó <strong>{entry.sound}</strong> · {historyLabel(entry)}
-                  </p>
-                </div>
-              </li>
+
+          <section className="grid">
+            {filteredSounds.map((sound, idx) => (
+              <button
+                key={sound}
+                className={`sound-button ${palette[idx % palette.length]}`}
+                onClick={() => sendPlay(sound)}
+                disabled={connectionState === 'disconnected' || connectionState === 'connecting'}
+                title={sound}
+              >
+                <span className="sound-name">{sound.replace(/\.[^/.]+$/, '')}</span>
+                <span className="sound-ext">{sound.split('.').pop()}</span>
+              </button>
             ))}
-          </ul>
-        )}
-      </section>
+            {!sounds.length && (
+              <div className="empty">
+                <p>
+                  No sounds found in the <code>sounds/</code> folder.
+                </p>
+                <p>Add files (mp3, wav, ogg, flac) and reload.</p>
+              </div>
+            )}
+          </section>
+
+          <section className="history">
+            <div className="history-header">
+              <div>
+                <p className="eyebrow">Historial</p>
+                <h2>Últimas reproducciones</h2>
+              </div>
+              <p className="history-count">{history.length} eventos</p>
+            </div>
+            {!history.length && <p className="empty-history">Todavía no hay reproducciones.</p>}
+            {history.length > 0 && (
+              <ul className="history-list">
+                {history.map((entry) => (
+                  <li key={`${entry.at}-${entry.sound}`}>
+                    {avatarUrl(entry.user) ? (
+                      <img
+                        className="history-avatar"
+                        src={avatarUrl(entry.user)}
+                        alt={entry.user.username}
+                      />
+                    ) : (
+                      <div className="history-avatar">
+                        {entry.user.globalName?.[0] || entry.user.username?.[0] || '?'}
+                      </div>
+                    )}
+                    <div className="history-body">
+                      <p className="history-user">{entry.user.globalName || entry.user.username}</p>
+                      <p className="history-meta">
+                        disparó <strong>{entry.sound}</strong> · {historyLabel(entry)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
     </div>
   );
 }
