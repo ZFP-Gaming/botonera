@@ -4,6 +4,7 @@
   color: #f7f7f7;
   background: radial-gradient(circle at 20% 20%, #2a2f3b, #0b0d11 50%);
   font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --grid-columns: 7;
 }
 
 * {
@@ -232,8 +233,14 @@ h1 {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr));
   gap: 16px;
+}
+
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
 }
 
 .favorites {

@@ -10,7 +10,9 @@ import {
 
 const defaultWsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001';
 const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const PAGE_SIZE = 24;
+const GRID_COLUMNS = 7;
+const GRID_ROWS = 5;
+const PAGE_SIZE = GRID_COLUMNS * GRID_ROWS;
 const HISTORY_PAGE_SIZE = 12;
 
 export default function App() {
