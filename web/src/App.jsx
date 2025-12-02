@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CaretDoubleLeft,
   CaretDoubleRight,
@@ -14,6 +14,48 @@ const GRID_COLUMNS = 7;
 const GRID_ROWS = 5;
 const PAGE_SIZE = GRID_COLUMNS * GRID_ROWS;
 const HISTORY_PAGE_SIZE = 12;
+const FAVORITE_KEY_ORDER = [
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
+  '0',
+  'q',
+  'w',
+  'e',
+  'r',
+  't',
+  'y',
+  'u',
+  'i',
+  'o',
+  'p',
+  'a',
+  's',
+  'd',
+  'f',
+  'g',
+  'h',
+  'j',
+  'k',
+  'l',
+  ';',
+  'z',
+  'x',
+  'c',
+  'v',
+  'b',
+  'n',
+  'm',
+  '<',
+  '>',
+  '/',
+];
 
 export default function App() {
   const [sounds, setSounds] = useState([]);
@@ -187,28 +229,52 @@ export default function App() {
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  const sendPlay = (name) => {
-    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      setError('Not connected to bot control server.');
-      return;
-    }
-    if (!sessionToken || !user) {
-      setError('Necesitas iniciar sesión con Discord antes de reproducir.');
-      return;
-    }
-    setError(null);
-    socketRef.current.send(JSON.stringify({ type: 'play', name, token: sessionToken }));
-  };
+  const sendPlay = useCallback(
+    (name) => {
+      if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+        setError('Not connected to bot control server.');
+        return;
+      }
+      if (!sessionToken || !user) {
+        setError('Necesitas iniciar sesión con Discord antes de reproducir.');
+        return;
+      }
+      setError(null);
+      socketRef.current.send(JSON.stringify({ type: 'play', name, token: sessionToken }));
+    },
+    [sessionToken, user],
+  );
+
+  const favoriteSet = useMemo(() => new Set(favorites), [favorites]);
 
   const favoriteSounds = useMemo(
-    () => sounds.filter((sound) => favorites.includes(sound)),
+    () => favorites.filter((sound) => sounds.includes(sound)),
     [sounds, favorites],
   );
 
   const nonFavoriteSounds = useMemo(
-    () => sounds.filter((sound) => !favorites.includes(sound)),
-    [sounds, favorites],
+    () => sounds.filter((sound) => !favoriteSet.has(sound)),
+    [sounds, favoriteSet],
   );
+
+  const favoriteKeyBySound = useMemo(() => {
+    const mapping = {};
+    favoriteSounds.forEach((sound, idx) => {
+      const key = FAVORITE_KEY_ORDER[idx];
+      if (key) {
+        mapping[sound] = key;
+      }
+    });
+    return mapping;
+  }, [favoriteSounds]);
+
+  const favoriteKeyBindings = useMemo(() => {
+    const bindings = new Map();
+    Object.entries(favoriteKeyBySound).forEach(([sound, key]) => {
+      bindings.set(key.toLowerCase(), sound);
+    });
+    return bindings;
+  }, [favoriteKeyBySound]);
 
   const filteredFavorites = favoriteSounds;
 
@@ -234,6 +300,25 @@ export default function App() {
       ),
     [history, historyPage],
   );
+
+  useEffect(() => {
+    if (!favoriteKeyBindings.size) return undefined;
+    const handler = (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target;
+      const tagName = target?.tagName;
+      const isTyping =
+        tagName === 'INPUT' || tagName === 'TEXTAREA' || target?.isContentEditable;
+      if (isTyping || !user) return;
+      const key = event.key.toLowerCase();
+      const sound = favoriteKeyBindings.get(key);
+      if (!sound) return;
+      event.preventDefault();
+      sendPlay(sound);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [favoriteKeyBindings, sendPlay, user]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -280,6 +365,35 @@ export default function App() {
     u?.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=64` : null;
 
   const palette = ['tone-cyan', 'tone-purple', 'tone-green', 'tone-red'];
+  const [draggingSound, setDraggingSound] = useState(null);
+
+  const handleDragStart = (event, sound) => {
+    event.dataTransfer?.setData('text/plain', sound);
+    setDraggingSound(sound);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingSound(null);
+  };
+
+  const handleDrop = (event, targetSound) => {
+    event.preventDefault();
+    setFavorites((prev) => {
+      if (!draggingSound || draggingSound === targetSound) return prev;
+      const fromIdx = prev.indexOf(draggingSound);
+      const toIdx = prev.indexOf(targetSound);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const next = [...prev];
+      next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, draggingSound);
+      return next;
+    });
+    setDraggingSound(null);
+  };
+
+  const handleDragOver = (event) => {
+    event.preventDefault();
+  };
 
   return (
     <div className="app">
@@ -338,20 +452,6 @@ export default function App() {
         </section>
       ) : (
         <>
-          <div className="toolbar">
-            <div className="search">
-              <input
-                type="search"
-                placeholder="Search sounds..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              <span className="search-count">
-                {filteredTotalCount} / {sounds.length}
-              </span>
-            </div>
-          </div>
-
           {favorites.length > 0 && (
             <section className="favorites">
               <div className="section-header">
@@ -369,11 +469,22 @@ export default function App() {
                       key={sound}
                       className={`sound-button ${palette[idx % palette.length]}`}
                       onClick={() => sendPlay(sound)}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, sound)}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, sound)}
+                      data-dragging={draggingSound === sound}
                       disabled={
                         connectionState === 'disconnected' || connectionState === 'connecting'
                       }
                       title={sound}
                     >
+                      {favoriteKeyBySound[sound] && (
+                        <span className="favorite-key" aria-hidden="true">
+                          {favoriteKeyBySound[sound]}
+                        </span>
+                      )}
                       <span
                         className="favorite-toggle"
                         onClick={(e) => toggleFavorite(e, sound)}
@@ -404,6 +515,20 @@ export default function App() {
               )}
             </section>
           )}
+
+          <div className="toolbar">
+            <div className="search">
+              <input
+                type="search"
+                placeholder="Search sounds..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <span className="search-count">
+                {filteredTotalCount} / {sounds.length}
+              </span>
+            </div>
+          </div>
 
           <section className="grid">
             {paginatedNonFavorites.map((sound, idx) => (

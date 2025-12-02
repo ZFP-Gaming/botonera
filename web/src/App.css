@@ -253,6 +253,13 @@ h1 {
 
 .favorites-grid {
   margin-top: 12px;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .favorites-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
 }
 
 .pagination {
@@ -335,6 +342,11 @@ h1 {
   cursor: not-allowed;
 }
 
+.sound-button[data-dragging='true'] {
+  opacity: 0.7;
+  outline: 2px dashed rgba(255, 255, 255, 0.6);
+}
+
 .sound-name {
   font-weight: 600;
   font-size: 16px;
@@ -372,6 +384,18 @@ h1 {
 .favorite-toggle:hover {
   transform: scale(1.05);
   filter: brightness(1.1);
+}
+
+.favorite-key {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #cbd2e0;
+  font-family: 'SFMono-Regular', 'Fira Code', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New',
+    monospace;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
 .tone-cyan {
