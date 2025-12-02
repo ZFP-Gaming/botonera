@@ -52,8 +52,8 @@ const FAVORITE_KEY_ORDER = [
   'b',
   'n',
   'm',
-  '<',
-  '>',
+  ',',
+  '.',
   '/',
 ];
 
