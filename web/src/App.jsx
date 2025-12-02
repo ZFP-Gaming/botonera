@@ -67,6 +67,7 @@ export default function App() {
     if (typeof window === 'undefined') return null;
     return localStorage.getItem('sessionToken');
   });
+  const [volume, setVolume] = useState(50);
   const [user, setUser] = useState(() => {
     if (typeof window === 'undefined') return null;
     const raw = localStorage.getItem('sessionUser');
@@ -149,6 +150,14 @@ export default function App() {
             setHistory(payload.entries || []);
             setHistoryPage(1);
             break;
+          case 'volume': {
+            const raw = typeof payload.value === 'number' ? payload.value : null;
+            if (raw !== null) {
+              const clamped = Math.max(0, Math.min(1, raw));
+              setVolume(Math.round(clamped * 100));
+            }
+            break;
+          }
           case 'error':
             setError(payload.message || 'Unexpected error');
             break;
@@ -241,6 +250,24 @@ export default function App() {
       }
       setError(null);
       socketRef.current.send(JSON.stringify({ type: 'play', name, token: sessionToken }));
+    },
+    [sessionToken, user],
+  );
+
+  const sendVolume = useCallback(
+    (value) => {
+      if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+        setError('Not connected to bot control server.');
+        return;
+      }
+      if (!sessionToken || !user) {
+        setError('Necesitas iniciar sesión con Discord antes de ajustar el volumen.');
+        return;
+      }
+      setError(null);
+      socketRef.current.send(
+        JSON.stringify({ type: 'setVolume', value: value / 100, token: sessionToken }),
+      );
     },
     [sessionToken, user],
   );
@@ -395,6 +422,21 @@ export default function App() {
     event.preventDefault();
   };
 
+  useEffect(() => {
+    if (!user) {
+      setVolume(50);
+    }
+  }, [user]);
+
+  const handleVolumeChange = (event) => {
+    const next = Number(event.target.value);
+    setVolume(next);
+    sendVolume(next);
+  };
+
+  const volumeDisabled =
+    !user || connectionState === 'disconnected' || connectionState === 'connecting';
+
   return (
     <div className="app">
       <header className="header">
@@ -527,6 +569,22 @@ export default function App() {
               <span className="search-count">
                 {filteredTotalCount} / {sounds.length}
               </span>
+            </div>
+            <div className="volume-control" aria-live="polite">
+              <label htmlFor="volume-slider">Volumen</label>
+              <input
+                id="volume-slider"
+                type="range"
+                min="0"
+                max="100"
+                value={volume}
+                onChange={handleVolumeChange}
+                disabled={volumeDisabled}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={volume}
+              />
+              <span className="volume-value">{volume}%</span>
             </div>
           </div>
 

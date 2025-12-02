@@ -54,6 +54,8 @@ const audioPlayer = createAudioPlayer({
 });
 let nowPlaying = null;
 let wss;
+const DEFAULT_VOLUME = 0.5;
+let volume = DEFAULT_VOLUME;
 const actionHistory = [];
 const historyLimit = Number(process.env.HISTORY_LIMIT);
 const MAX_HISTORY = Number.isFinite(historyLimit) && historyLimit >= 0 ? historyLimit : 200;
@@ -213,7 +215,10 @@ function playSoundByName(name) {
     throw new Error('Sound not found.');
   }
 
-  const resource = createAudioResource(filePath);
+  const resource = createAudioResource(filePath, { inlineVolume: true });
+  if (resource.volume) {
+    resource.volume.setVolume(volume);
+  }
   connection.subscribe(audioPlayer);
   nowPlaying = safeName;
   audioPlayer.play(resource);
@@ -248,6 +253,25 @@ function getSession(token) {
   } catch (_err) {
     return null;
   }
+}
+
+function clampVolume(value) {
+  if (!Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(1, value));
+}
+
+function applyVolume(newVolume) {
+  const safeVolume = clampVolume(newVolume);
+  if (safeVolume === null) {
+    throw new Error('Invalid volume value.');
+  }
+  volume = safeVolume;
+  const resource = audioPlayer.state?.resource;
+  if (resource?.volume?.setVolume) {
+    resource.volume.setVolume(volume);
+  }
+  broadcast({ type: 'volume', value: volume });
+  return volume;
 }
 
 function pruneHistory() {
@@ -322,6 +346,31 @@ function handleSocketMessage(socket, message) {
     return;
   }
 
+  if (parsed.type === 'setVolume') {
+    const session = getSession(parsed.token);
+    if (!session) {
+      socket.send(
+        JSON.stringify({ type: 'error', message: 'Debes iniciar sesión con Discord primero.' }),
+      );
+      return;
+    }
+
+    try {
+      const nextVolume = applyVolume(Number(parsed.value));
+      socket.send(
+        JSON.stringify({
+          type: 'ack',
+          action: 'setVolume',
+          ok: true,
+          value: nextVolume,
+        }),
+      );
+    } catch (error) {
+      socket.send(JSON.stringify({ type: 'error', message: error.message }));
+    }
+    return;
+  }
+
   if (parsed.type === 'list') {
     socket.send(JSON.stringify({ type: 'sounds', sounds: listSounds() }));
     return;
@@ -364,6 +413,7 @@ function startWebSocketServer() {
     );
     socket.send(JSON.stringify({ type: 'nowPlaying', name: nowPlaying }));
     socket.send(JSON.stringify({ type: 'history', entries: actionHistory }));
+    socket.send(JSON.stringify({ type: 'volume', value: volume }));
 
     socket.on('message', (data) => handleSocketMessage(socket, data.toString()));
   });
