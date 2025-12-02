@@ -96,10 +96,10 @@ export default function App() {
   const loginWindowRef = useRef(null);
 
   const statusLabel = useMemo(() => {
-    if (connectionState === 'ready') return 'Ready (bot connected)';
-    if (connectionState === 'waiting') return 'Waiting for /join in Discord';
-    if (connectionState === 'connected') return 'Connected to control server';
-    return 'Disconnected';
+    if (connectionState === 'ready') return 'Listo (bot conectado)';
+    if (connectionState === 'waiting') return 'Esperando /join en Discord';
+    if (connectionState === 'connected') return 'Conectado al servidor de control';
+    return 'Desconectado';
   }, [connectionState]);
 
   useEffect(() => {
@@ -130,7 +130,7 @@ export default function App() {
     };
 
     socket.onerror = () => {
-      setError('Connection error. Is the bot running?');
+      setError('Error de conexión. ¿Está corriendo el bot?');
     };
 
     socket.onmessage = (event) => {
@@ -159,13 +159,13 @@ export default function App() {
             break;
           }
           case 'error':
-            setError(payload.message || 'Unexpected error');
+            setError(payload.message || 'Error inesperado');
             break;
           default:
             break;
         }
       } catch (err) {
-        setError('Bad data from server.');
+        setError('Datos inválidos del servidor.');
       }
     };
 
@@ -241,7 +241,7 @@ export default function App() {
   const sendPlay = useCallback(
     (name) => {
       if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-        setError('Not connected to bot control server.');
+        setError('Sin conexión al servidor de control del bot.');
         return;
       }
       if (!sessionToken || !user) {
@@ -257,7 +257,7 @@ export default function App() {
   const sendVolume = useCallback(
     (value) => {
       if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-        setError('Not connected to bot control server.');
+        setError('Sin conexión al servidor de control del bot.');
         return;
       }
       if (!sessionToken || !user) {
@@ -441,16 +441,16 @@ export default function App() {
     <div className="app">
       <header className="header">
         <div>
-          <p className="eyebrow">Discord Soundboard</p>
-          <h1>Botonera Control</h1>
-          <p className="subtitle">Trigger sounds in Discord straight from your browser.</p>
+          <p className="eyebrow">Botonera de Discord</p>
+          <h1>Panel de la Botonera</h1>
+          <p className="subtitle">Lanza sonidos en Discord directo desde tu navegador.</p>
         </div>
         <div className="status-card">
           <div className={`status-dot status-${connectionState}`} />
           <div>
-            <p className="status-label">Status</p>
+            <p className="status-label">Estado</p>
             <p className="status-value">{statusLabel}</p>
-            {nowPlaying && <p className="now-playing">Now playing: {nowPlaying}</p>}
+            {nowPlaying && <p className="now-playing">Reproduciendo: {nowPlaying}</p>}
           </div>
         </div>
         <div className="auth">
@@ -562,7 +562,7 @@ export default function App() {
             <div className="search">
               <input
                 type="search"
-                placeholder="Search sounds..."
+                placeholder="Buscar sonidos..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -624,9 +624,9 @@ export default function App() {
             {!sounds.length ? (
               <div className="empty">
                 <p>
-                  No sounds found in the <code>sounds/</code> folder.
+                  No se encontraron sonidos en la carpeta <code>sounds/</code>.
                 </p>
-                <p>Add files (mp3, wav, ogg, flac) and reload.</p>
+                <p>Agrega archivos (mp3, wav, ogg, flac) y vuelve a cargar.</p>
               </div>
             ) : null}
             {sounds.length > 0 && !filteredNonFavorites.length && (
