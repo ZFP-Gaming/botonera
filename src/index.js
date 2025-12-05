@@ -56,11 +56,8 @@ if (!token || !clientId || !clientSecret) {
   throw new Error('Missing env vars. Require DISCORD_TOKEN, DISCORD_CLIENT_ID, and DISCORD_CLIENT_SECRET.');
 }
 
-const audioPlayer = createAudioPlayer({
-  behaviors: { noSubscriber: NoSubscriberBehavior.Pause },
-});
+const audioPlayersByGuild = new Map();
 const nowPlayingByGuild = new Map();
-let lastPlayGuildId = null;
 let wss;
 const DEFAULT_VOLUME = 0.5;
 let volume = DEFAULT_VOLUME;
@@ -195,8 +192,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     connection.destroy();
-    audioPlayer.stop();
-    nowPlaying = null;
+    const player = audioPlayersByGuild.get(interaction.guild.id);
+    if (player) {
+      player.stop(true);
+    }
     await interaction.reply({
       content: 'Left the voice channel.',
       ephemeral: true,
@@ -270,14 +269,14 @@ function playSoundByName(name, targetGuildId) {
     throw new Error('Sound not found.');
   }
 
+  const player = getOrCreateAudioPlayer(targetGuildId);
   const resource = createAudioResource(filePath, { inlineVolume: true });
   if (resource.volume) {
     resource.volume.setVolume(volume);
   }
-  connection.subscribe(audioPlayer);
+  connection.subscribe(player);
   nowPlayingByGuild.set(safeGuildId, safeName);
-  lastPlayGuildId = safeGuildId;
-  audioPlayer.play(resource);
+  player.play(resource);
   broadcast({ type: 'nowPlaying', name: safeName, guildId: safeGuildId });
   return safeName;
 }
@@ -322,10 +321,12 @@ function applyVolume(newVolume) {
     throw new Error('Invalid volume value.');
   }
   volume = safeVolume;
-  const resource = audioPlayer.state?.resource;
-  if (resource?.volume?.setVolume) {
-    resource.volume.setVolume(volume);
-  }
+  audioPlayersByGuild.forEach((player) => {
+    const resource = player.state?.resource;
+    if (resource?.volume?.setVolume) {
+      resource.volume.setVolume(volume);
+    }
+  });
   broadcast({ type: 'volume', value: volume });
   return volume;
 }
@@ -526,25 +527,35 @@ function startWebSocketServer() {
   });
 }
 
-audioPlayer.on(AudioPlayerStatus.Playing, () => {
-  if (!lastPlayGuildId) return;
-  broadcast({
-    type: 'nowPlaying',
-    name: nowPlayingByGuild.get(lastPlayGuildId) || null,
-    guildId: lastPlayGuildId,
+function getOrCreateAudioPlayer(guildId) {
+  if (audioPlayersByGuild.has(guildId)) {
+    return audioPlayersByGuild.get(guildId);
+  }
+  const player = createAudioPlayer({
+    behaviors: { noSubscriber: NoSubscriberBehavior.Pause },
   });
-});
 
-audioPlayer.on(AudioPlayerStatus.Idle, () => {
-  if (!lastPlayGuildId) return;
-  nowPlayingByGuild.set(lastPlayGuildId, null);
-  broadcast({ type: 'nowPlaying', name: null, guildId: lastPlayGuildId });
-});
+  player.on(AudioPlayerStatus.Playing, () => {
+    broadcast({
+      type: 'nowPlaying',
+      name: nowPlayingByGuild.get(guildId) || null,
+      guildId,
+    });
+  });
 
-audioPlayer.on('error', (error) => {
-  console.error('Audio player error:', error);
-  broadcast({ type: 'error', message: 'Audio playback failed.' });
-});
+  player.on(AudioPlayerStatus.Idle, () => {
+    nowPlayingByGuild.set(guildId, null);
+    broadcast({ type: 'nowPlaying', name: null, guildId });
+  });
+
+  player.on('error', (error) => {
+    console.error(`Audio player error for guild ${guildId}:`, error);
+    broadcast({ type: 'error', message: 'Audio playback failed.' });
+  });
+
+  audioPlayersByGuild.set(guildId, player);
+  return player;
+}
 
 async function exchangeCodeForUser(code) {
   const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
