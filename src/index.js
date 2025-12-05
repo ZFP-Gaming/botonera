@@ -31,12 +31,14 @@ const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
 const legacyGuildId = process.env.DISCORD_GUILD_ID;
 const guildIdsEnv = process.env.DISCORD_GUILD_IDS;
-const guildIds = guildIdsEnv
+let guildIds = guildIdsEnv
   ? guildIdsEnv
       .split(',')
       .map((id) => id.trim())
       .filter(Boolean)
   : [legacyGuildId].filter(Boolean);
+let allowedGuildIds = new Set(guildIds);
+const getDefaultGuildId = () => guildIds[0];
 const wsPort = Number(process.env.WS_PORT || 3001);
 const httpPort = Number(process.env.HTTP_PORT || 3000);
 const clientSecret = process.env.DISCORD_CLIENT_SECRET;
@@ -49,13 +51,9 @@ const soundDirs = (process.env.SOUND_DIR || defaultSoundDir)
   .map((dir) => dir.trim())
   .filter(Boolean)
   .map((dir) => path.resolve(dir));
-const allowedGuildIds = new Set(guildIds);
-const defaultGuildId = guildIds[0];
 
-if (!token || !clientId || !guildIds.length || !clientSecret) {
-  throw new Error(
-    'Missing env vars. Require DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and at least one guild ID (DISCORD_GUILD_ID or DISCORD_GUILD_IDS).',
-  );
+if (!token || !clientId || !clientSecret) {
+  throw new Error('Missing env vars. Require DISCORD_TOKEN, DISCORD_CLIENT_ID, and DISCORD_CLIENT_SECRET.');
 }
 
 const audioPlayer = createAudioPlayer({
@@ -84,13 +82,32 @@ const commands = [
 
 const rest = new REST({ version: '10' }).setToken(token);
 
+function refreshGuildsFromClient() {
+  if (guildIdsEnv) return; // Prefer explicit configuration if provided.
+  const cachedIds = Array.from(client.guilds.cache.values()).map((g) => g.id);
+  if (!cachedIds.length) {
+    console.warn('No guilds found in cache to register commands.');
+    return;
+  }
+  guildIds = cachedIds;
+  allowedGuildIds = new Set(guildIds);
+}
+
 async function registerCommands() {
+  if (!guildIds.length) {
+    console.warn('No guild IDs available for command registration.');
+    return;
+  }
+
   await Promise.all(
     guildIds.map((id) =>
       rest
         .put(Routes.applicationGuildCommands(clientId, id), { body: commands })
         .then(() => {
           console.log('Slash commands registered for guild', id);
+        })
+        .catch((error) => {
+          console.error(`Failed to register commands for guild ${id}:`, error);
         }),
     ),
   );
@@ -100,8 +117,10 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
 });
 
-client.once(Events.ClientReady, (readyClient) => {
+client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
+  refreshGuildsFromClient();
+  await registerCommands();
   broadcast({ type: 'guilds', guilds: listGuildsForClient() });
 });
 
@@ -222,7 +241,11 @@ function broadcast(payload) {
 }
 
 function playSoundByName(name, targetGuildId) {
-  const safeGuildId = allowedGuildIds.has(targetGuildId) ? targetGuildId : defaultGuildId;
+  const fallbackGuild = getDefaultGuildId();
+  if (!fallbackGuild) {
+    throw new Error('Bot is not configured for ningún servidor de Discord.');
+  }
+  const safeGuildId = allowedGuildIds.has(targetGuildId) ? targetGuildId : fallbackGuild;
   const connection = getVoiceConnection(safeGuildId);
   if (!connection) {
     throw new Error('Bot is not connected to a voice channel. Use /join first.');
@@ -316,7 +339,7 @@ function pruneHistory() {
 
 function serializeHistory() {
   return actionHistory.map((entry) => {
-    const guildId = entry.guildId || defaultGuildId;
+    const guildId = entry.guildId || getDefaultGuildId();
     return {
       ...entry,
       guildId,
@@ -365,7 +388,13 @@ function handleSocketMessage(socket, message) {
       return;
     }
 
-    const targetGuildId = allowedGuildIds.has(parsed.guildId) ? parsed.guildId : defaultGuildId;
+    const targetGuildId = allowedGuildIds.has(parsed.guildId)
+      ? parsed.guildId
+      : getDefaultGuildId();
+    if (!targetGuildId) {
+      socket.send(JSON.stringify({ type: 'error', message: 'No hay servidores configurados.' }));
+      return;
+    }
 
     const session = getSession(parsed.token);
     if (!session) {
@@ -406,7 +435,13 @@ function handleSocketMessage(socket, message) {
   }
 
   if (parsed.type === 'setVolume') {
-    const targetGuildId = allowedGuildIds.has(parsed.guildId) ? parsed.guildId : defaultGuildId;
+    const targetGuildId = allowedGuildIds.has(parsed.guildId)
+      ? parsed.guildId
+      : getDefaultGuildId();
+    if (!targetGuildId) {
+      socket.send(JSON.stringify({ type: 'error', message: 'No hay servidores configurados.' }));
+      return;
+    }
     const session = getSession(parsed.token);
     if (!session) {
       socket.send(
@@ -637,7 +672,6 @@ function startHttpServer() {
 }
 
 async function start() {
-  await registerCommands();
   startHttpServer();
   startWebSocketServer();
   await client.login(token);

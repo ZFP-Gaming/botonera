@@ -11,7 +11,7 @@ Environment variables (`.env`):
 - `DISCORD_CLIENT_ID`: application/bot ID
 - `DISCORD_CLIENT_SECRET`: OAuth client secret (needed for web login)
 - `DISCORD_GUILD_ID`: target guild where commands are registered (fallback if `DISCORD_GUILD_IDS` is not set)
-- `DISCORD_GUILD_IDS`: comma-separated guild IDs where the bot will register slash commands and accept control
+- `DISCORD_GUILD_IDS`: comma-separated guild IDs where the bot will register slash commands and accept control. If no guild IDs are provided, the bot will auto-registrar en todos los servidores donde esté presente al iniciar.
 - `WS_PORT`: WebSocket port for the control UI (default `3001`)
 - `HTTP_PORT`: HTTP port for OAuth/login helper (default `3000`)
 - `OAUTH_REDIRECT_URI`: Discord redirect URI (defaults to `http://localhost:${HTTP_PORT}/auth/callback`)
