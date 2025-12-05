@@ -10,7 +10,8 @@ Environment variables (`.env`):
 - `DISCORD_TOKEN`: bot token
 - `DISCORD_CLIENT_ID`: application/bot ID
 - `DISCORD_CLIENT_SECRET`: OAuth client secret (needed for web login)
-- `DISCORD_GUILD_ID`: target guild where commands are registered
+- `DISCORD_GUILD_ID`: target guild where commands are registered (fallback if `DISCORD_GUILD_IDS` is not set)
+- `DISCORD_GUILD_IDS`: comma-separated guild IDs where the bot will register slash commands and accept control
 - `WS_PORT`: WebSocket port for the control UI (default `3001`)
 - `HTTP_PORT`: HTTP port for OAuth/login helper (default `3000`)
 - `OAUTH_REDIRECT_URI`: Discord redirect URI (defaults to `http://localhost:${HTTP_PORT}/auth/callback`)
@@ -41,3 +42,6 @@ npm run dev -- --host
 ```
 
 Open the printed URL (default `http://localhost:5173`). Buttons map to files inside `sounds/`; clicking sends `{ type: "play", name: "<file>", token: "<session>" }` over WebSocket. You can override the WS endpoint with `VITE_WS_URL=ws://host:port npm run dev` and the OAuth helper base with `VITE_API_URL=http://host:port`.
+
+### Controlar varios servidores de Discord
+El bot ahora acepta una lista de servidores/guilds. Configura `DISCORD_GUILD_IDS` con los IDs separados por comas (o deja `DISCORD_GUILD_ID` para un solo servidor). La UI muestra un combo “Servidor de Discord” con los nombres de los guilds donde el bot está presente; el historial y los disparos se filtran por el servidor seleccionado.

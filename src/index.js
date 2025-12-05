@@ -29,7 +29,14 @@ const {
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
-const guildId = process.env.DISCORD_GUILD_ID;
+const legacyGuildId = process.env.DISCORD_GUILD_ID;
+const guildIdsEnv = process.env.DISCORD_GUILD_IDS;
+const guildIds = guildIdsEnv
+  ? guildIdsEnv
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean)
+  : [legacyGuildId].filter(Boolean);
 const wsPort = Number(process.env.WS_PORT || 3001);
 const httpPort = Number(process.env.HTTP_PORT || 3000);
 const clientSecret = process.env.DISCORD_CLIENT_SECRET;
@@ -42,17 +49,20 @@ const soundDirs = (process.env.SOUND_DIR || defaultSoundDir)
   .map((dir) => dir.trim())
   .filter(Boolean)
   .map((dir) => path.resolve(dir));
+const allowedGuildIds = new Set(guildIds);
+const defaultGuildId = guildIds[0];
 
-if (!token || !clientId || !guildId || !clientSecret) {
+if (!token || !clientId || !guildIds.length || !clientSecret) {
   throw new Error(
-    'Missing env vars. Require DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and DISCORD_GUILD_ID.',
+    'Missing env vars. Require DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET and at least one guild ID (DISCORD_GUILD_ID or DISCORD_GUILD_IDS).',
   );
 }
 
 const audioPlayer = createAudioPlayer({
   behaviors: { noSubscriber: NoSubscriberBehavior.Pause },
 });
-let nowPlaying = null;
+const nowPlayingByGuild = new Map();
+let lastPlayGuildId = null;
 let wss;
 const DEFAULT_VOLUME = 0.5;
 let volume = DEFAULT_VOLUME;
@@ -75,8 +85,15 @@ const commands = [
 const rest = new REST({ version: '10' }).setToken(token);
 
 async function registerCommands() {
-  await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands });
-  console.log('Slash commands registered for guild', guildId);
+  await Promise.all(
+    guildIds.map((id) =>
+      rest
+        .put(Routes.applicationGuildCommands(clientId, id), { body: commands })
+        .then(() => {
+          console.log('Slash commands registered for guild', id);
+        }),
+    ),
+  );
 }
 
 const client = new Client({
@@ -85,10 +102,18 @@ const client = new Client({
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
+  broadcast({ type: 'guilds', guilds: listGuildsForClient() });
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
+  if (!allowedGuildIds.has(interaction.guildId)) {
+    await interaction.reply({
+      content: 'Este bot no está configurado para este servidor.',
+      ephemeral: true,
+    });
+    return;
+  }
   if (interaction.commandName === 'join') {
     const memberChannel = interaction.member?.voice?.channel;
     if (!memberChannel) {
@@ -124,7 +149,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         content: `Joined ${memberChannel.name}.`,
         ephemeral: true,
       });
-      broadcast({ type: 'status', connected: true, channel: memberChannel.name });
+      broadcast({
+        type: 'status',
+        connected: true,
+        channel: memberChannel.name,
+        guildId: interaction.guildId,
+      });
     } catch (error) {
       console.error('Failed to join voice channel:', error);
       await interaction.reply({
@@ -152,8 +182,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       content: 'Left the voice channel.',
       ephemeral: true,
     });
-    broadcast({ type: 'status', connected: false });
-    broadcast({ type: 'nowPlaying', name: null });
+    nowPlayingByGuild.set(interaction.guildId, null);
+    broadcast({ type: 'status', connected: false, guildId: interaction.guildId });
+    broadcast({ type: 'nowPlaying', name: null, guildId: interaction.guildId });
   }
 });
 
@@ -190,8 +221,9 @@ function broadcast(payload) {
   });
 }
 
-function playSoundByName(name) {
-  const connection = getVoiceConnection(guildId);
+function playSoundByName(name, targetGuildId) {
+  const safeGuildId = allowedGuildIds.has(targetGuildId) ? targetGuildId : defaultGuildId;
+  const connection = getVoiceConnection(safeGuildId);
   if (!connection) {
     throw new Error('Bot is not connected to a voice channel. Use /join first.');
   }
@@ -220,9 +252,10 @@ function playSoundByName(name) {
     resource.volume.setVolume(volume);
   }
   connection.subscribe(audioPlayer);
-  nowPlaying = safeName;
+  nowPlayingByGuild.set(safeGuildId, safeName);
+  lastPlayGuildId = safeGuildId;
   audioPlayer.play(resource);
-  broadcast({ type: 'nowPlaying', name: nowPlaying });
+  broadcast({ type: 'nowPlaying', name: safeName, guildId: safeGuildId });
   return safeName;
 }
 
@@ -281,6 +314,17 @@ function pruneHistory() {
   }
 }
 
+function serializeHistory() {
+  return actionHistory.map((entry) => {
+    const guildId = entry.guildId || defaultGuildId;
+    return {
+      ...entry,
+      guildId,
+      guildName: entry.guildName || formatGuildForClient(guildId).name,
+    };
+  });
+}
+
 function formatUserForClient(user) {
   const discriminator =
     (user.discriminator || user.discriminator === 0) && user.discriminator !== '0'
@@ -295,6 +339,15 @@ function formatUserForClient(user) {
     discriminator,
     avatar: user.avatar,
   };
+}
+
+function formatGuildForClient(id) {
+  const guild = client.guilds.cache.get(id);
+  return { id, name: guild?.name || id };
+}
+
+function listGuildsForClient() {
+  return Array.from(allowedGuildIds).map((id) => formatGuildForClient(id));
 }
 
 function handleSocketMessage(socket, message) {
@@ -312,6 +365,8 @@ function handleSocketMessage(socket, message) {
       return;
     }
 
+    const targetGuildId = allowedGuildIds.has(parsed.guildId) ? parsed.guildId : defaultGuildId;
+
     const session = getSession(parsed.token);
     if (!session) {
       socket.send(
@@ -320,16 +375,18 @@ function handleSocketMessage(socket, message) {
       return;
     }
 
-      try {
-        const sound = playSoundByName(parsed.name);
-        const entry = {
-          sound,
-          at: Date.now(),
+    try {
+      const sound = playSoundByName(parsed.name, targetGuildId);
+      const entry = {
+        sound,
+        at: Date.now(),
         user: formatUserForClient(session.user),
+        guildId: targetGuildId,
+        guildName: formatGuildForClient(targetGuildId).name,
       };
       actionHistory.unshift(entry);
       pruneHistory();
-      broadcast({ type: 'history', entries: actionHistory });
+      broadcast({ type: 'history', entries: serializeHistory() });
       socket.send(
         JSON.stringify({
           type: 'ack',
@@ -338,6 +395,8 @@ function handleSocketMessage(socket, message) {
           name: sound,
           user: entry.user,
           at: entry.at,
+          guildId: targetGuildId,
+          guildName: entry.guildName,
         }),
       );
     } catch (error) {
@@ -347,6 +406,7 @@ function handleSocketMessage(socket, message) {
   }
 
   if (parsed.type === 'setVolume') {
+    const targetGuildId = allowedGuildIds.has(parsed.guildId) ? parsed.guildId : defaultGuildId;
     const session = getSession(parsed.token);
     if (!session) {
       socket.send(
@@ -363,6 +423,7 @@ function handleSocketMessage(socket, message) {
           action: 'setVolume',
           ok: true,
           value: nextVolume,
+          guildId: targetGuildId,
         }),
       );
     } catch (error) {
@@ -405,14 +466,25 @@ function startWebSocketServer() {
     });
 
     socket.send(JSON.stringify({ type: 'sounds', sounds: listSounds() }));
-    socket.send(
-      JSON.stringify({
-        type: 'status',
-        connected: Boolean(getVoiceConnection(guildId)),
-      }),
-    );
-    socket.send(JSON.stringify({ type: 'nowPlaying', name: nowPlaying }));
-    socket.send(JSON.stringify({ type: 'history', entries: actionHistory }));
+    socket.send(JSON.stringify({ type: 'guilds', guilds: listGuildsForClient() }));
+    guildIds.forEach((id) => {
+      const connection = getVoiceConnection(id);
+      socket.send(
+        JSON.stringify({
+          type: 'status',
+          connected: Boolean(connection),
+          guildId: id,
+        }),
+      );
+      socket.send(
+        JSON.stringify({
+          type: 'nowPlaying',
+          name: nowPlayingByGuild.get(id) || null,
+          guildId: id,
+        }),
+      );
+    });
+    socket.send(JSON.stringify({ type: 'history', entries: serializeHistory() }));
     socket.send(JSON.stringify({ type: 'volume', value: volume }));
 
     socket.on('message', (data) => handleSocketMessage(socket, data.toString()));
@@ -420,12 +492,18 @@ function startWebSocketServer() {
 }
 
 audioPlayer.on(AudioPlayerStatus.Playing, () => {
-  broadcast({ type: 'nowPlaying', name: nowPlaying });
+  if (!lastPlayGuildId) return;
+  broadcast({
+    type: 'nowPlaying',
+    name: nowPlayingByGuild.get(lastPlayGuildId) || null,
+    guildId: lastPlayGuildId,
+  });
 });
 
 audioPlayer.on(AudioPlayerStatus.Idle, () => {
-  nowPlaying = null;
-  broadcast({ type: 'nowPlaying', name: null });
+  if (!lastPlayGuildId) return;
+  nowPlayingByGuild.set(lastPlayGuildId, null);
+  broadcast({ type: 'nowPlaying', name: null, guildId: lastPlayGuildId });
 });
 
 audioPlayer.on('error', (error) => {

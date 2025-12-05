@@ -8,6 +8,9 @@ import {
   SpeakerHigh,
 } from '@phosphor-icons/react';
 
+const SESSION_TOKEN_KEY = 'sessionToken';
+const SESSION_USER_KEY = 'sessionUser';
+const SELECTED_GUILD_KEY = 'selectedGuildId';
 const defaultWsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001';
 const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const GRID_COLUMNS = 7;
@@ -58,19 +61,25 @@ const FAVORITE_KEY_ORDER = [
 ];
 
 export default function App() {
+  const [guilds, setGuilds] = useState([]);
+  const [selectedGuildId, setSelectedGuildId] = useState(() => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(SELECTED_GUILD_KEY);
+  });
   const [sounds, setSounds] = useState([]);
   const [connectionState, setConnectionState] = useState('disconnected');
-  const [nowPlaying, setNowPlaying] = useState(null);
+  const [statusByGuild, setStatusByGuild] = useState({});
+  const [nowPlayingByGuild, setNowPlayingByGuild] = useState({});
   const [error, setError] = useState(null);
   const [query, setQuery] = useState('');
   const [sessionToken, setSessionToken] = useState(() => {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('sessionToken');
+    return localStorage.getItem(SESSION_TOKEN_KEY);
   });
   const [volume, setVolume] = useState(50);
   const [user, setUser] = useState(() => {
     if (typeof window === 'undefined') return null;
-    const raw = localStorage.getItem('sessionUser');
+    const raw = localStorage.getItem(SESSION_USER_KEY);
     if (!raw) return null;
     try {
       return JSON.parse(raw);
@@ -79,9 +88,9 @@ export default function App() {
     }
   });
   const [history, setHistory] = useState([]);
-  const [authLoading, setAuthLoading] = useState(() => Boolean(
-    typeof window !== 'undefined' && localStorage.getItem('sessionToken'),
-  ));
+  const [authLoading, setAuthLoading] = useState(() =>
+    Boolean(typeof window !== 'undefined' && localStorage.getItem(SESSION_TOKEN_KEY)),
+  );
   const [historyPage, setHistoryPage] = useState(1);
   const [favorites, setFavorites] = useState(() => {
     if (typeof window === 'undefined') return [];
@@ -96,17 +105,36 @@ export default function App() {
   const loginWindowRef = useRef(null);
 
   const statusLabel = useMemo(() => {
-    if (connectionState === 'ready') return 'Listo (bot conectado)';
-    if (connectionState === 'waiting') return 'Esperando /join en Discord';
-    if (connectionState === 'connected') return 'Conectado al servidor de control';
+    const currentStatus = selectedGuildId ? statusByGuild[selectedGuildId] : connectionState;
+    if (currentStatus === 'ready') return 'Listo (bot conectado)';
+    if (currentStatus === 'waiting') return 'Esperando /join en Discord';
+    if (currentStatus === 'connected') return 'Conectado al servidor de control';
     return 'Desconectado';
-  }, [connectionState]);
+  }, [connectionState, selectedGuildId, statusByGuild]);
+
+  const selectedNowPlaying = useMemo(
+    () => (selectedGuildId ? nowPlayingByGuild[selectedGuildId] : null),
+    [nowPlayingByGuild, selectedGuildId],
+  );
+
+  useEffect(() => {
+    if (!selectedGuildId) {
+      setConnectionState('disconnected');
+      return;
+    }
+    const status = statusByGuild[selectedGuildId];
+    if (status) {
+      setConnectionState(status);
+    }
+  }, [selectedGuildId, statusByGuild]);
 
   useEffect(() => {
     if (!user) {
       setSounds([]);
       setHistory([]);
-      setNowPlaying(null);
+      setHistoryPage(1);
+      setNowPlayingByGuild({});
+      setStatusByGuild({});
       setConnectionState('disconnected');
       if (socketRef.current) {
         socketRef.current.close();
@@ -137,15 +165,45 @@ export default function App() {
       try {
         const payload = JSON.parse(event.data);
         switch (payload.type) {
+          case 'guilds': {
+            const nextGuilds = Array.isArray(payload.guilds) ? payload.guilds : [];
+            setGuilds(nextGuilds);
+            if (nextGuilds.length) {
+              setSelectedGuildId((prev) => {
+                const exists = prev && nextGuilds.some((g) => g.id === prev);
+                const next = exists ? prev : nextGuilds[0].id;
+                if (next) localStorage.setItem(SELECTED_GUILD_KEY, next);
+                return next;
+              });
+            }
+            break;
+          }
           case 'sounds':
             setSounds(payload.sounds || []);
             break;
-          case 'status':
-            setConnectionState(payload.connected ? 'ready' : 'waiting');
+          case 'status': {
+            const guildId = payload.guildId || selectedGuildId;
+            if (guildId) {
+              setStatusByGuild((prev) => ({
+                ...prev,
+                [guildId]: payload.connected ? 'ready' : 'waiting',
+              }));
+              if (guildId === selectedGuildId) {
+                setConnectionState(payload.connected ? 'ready' : 'waiting');
+              }
+            }
             break;
-          case 'nowPlaying':
-            setNowPlaying(payload.name);
+          }
+          case 'nowPlaying': {
+            const guildId = payload.guildId || selectedGuildId;
+            if (guildId) {
+              setNowPlayingByGuild((prev) => ({
+                ...prev,
+                [guildId]: payload.name,
+              }));
+            }
             break;
+          }
           case 'history':
             setHistory(payload.entries || []);
             setHistoryPage(1);
@@ -170,7 +228,7 @@ export default function App() {
     };
 
     return () => socket.close();
-  }, [user]);
+  }, [selectedGuildId, user]);
 
   useEffect(() => {
     const token = sessionToken;
@@ -196,8 +254,8 @@ export default function App() {
       })
       .catch((err) => {
         if (err.message === 'unauthorized') {
-          localStorage.removeItem('sessionToken');
-          localStorage.removeItem('sessionUser');
+          localStorage.removeItem(SESSION_TOKEN_KEY);
+          localStorage.removeItem(SESSION_USER_KEY);
           setSessionToken(null);
           setUser(null);
         } else {
@@ -213,10 +271,10 @@ export default function App() {
 
   useEffect(() => {
     if (!user) {
-      localStorage.removeItem('sessionUser');
+      localStorage.removeItem(SESSION_USER_KEY);
       return;
     }
-    localStorage.setItem('sessionUser', JSON.stringify(user));
+    localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user));
   }, [user]);
 
   useEffect(() => {
@@ -224,9 +282,9 @@ export default function App() {
       const payload = event.data;
       if (!payload || typeof payload !== 'object') return;
       if (payload.token && payload.user) {
+        localStorage.setItem(SESSION_TOKEN_KEY, payload.token);
+        localStorage.setItem(SESSION_USER_KEY, JSON.stringify(payload.user));
         setSessionToken(payload.token);
-        localStorage.setItem('sessionToken', payload.token);
-        localStorage.setItem('sessionUser', JSON.stringify(payload.user));
         setUser(payload.user);
         setError(null);
         if (loginWindowRef.current && !loginWindowRef.current.closed) {
@@ -240,6 +298,10 @@ export default function App() {
 
   const sendPlay = useCallback(
     (name) => {
+      if (!selectedGuildId) {
+        setError('Selecciona un servidor de Discord para controlar.');
+        return;
+      }
       if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
         setError('Sin conexión al servidor de control del bot.');
         return;
@@ -249,13 +311,19 @@ export default function App() {
         return;
       }
       setError(null);
-      socketRef.current.send(JSON.stringify({ type: 'play', name, token: sessionToken }));
+      socketRef.current.send(
+        JSON.stringify({ type: 'play', name, token: sessionToken, guildId: selectedGuildId }),
+      );
     },
-    [sessionToken, user],
+    [selectedGuildId, sessionToken, user],
   );
 
   const sendVolume = useCallback(
     (value) => {
+      if (!selectedGuildId) {
+        setError('Selecciona un servidor de Discord para controlar.');
+        return;
+      }
       if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
         setError('Sin conexión al servidor de control del bot.');
         return;
@@ -266,10 +334,15 @@ export default function App() {
       }
       setError(null);
       socketRef.current.send(
-        JSON.stringify({ type: 'setVolume', value: value / 100, token: sessionToken }),
+        JSON.stringify({
+          type: 'setVolume',
+          value: value / 100,
+          token: sessionToken,
+          guildId: selectedGuildId,
+        }),
       );
     },
-    [sessionToken, user],
+    [selectedGuildId, sessionToken, user],
   );
 
   const favoriteSet = useMemo(() => new Set(favorites), [favorites]);
@@ -318,14 +391,18 @@ export default function App() {
     (page - 1) * PAGE_SIZE,
     page * PAGE_SIZE,
   );
-  const historyTotalPages = Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE));
+  const filteredHistory = useMemo(
+    () => history.filter((entry) => !selectedGuildId || entry.guildId === selectedGuildId),
+    [history, selectedGuildId],
+  );
+  const historyTotalPages = Math.max(1, Math.ceil(filteredHistory.length / HISTORY_PAGE_SIZE));
   const paginatedHistory = useMemo(
     () =>
-      history.slice(
+      filteredHistory.slice(
         (historyPage - 1) * HISTORY_PAGE_SIZE,
         historyPage * HISTORY_PAGE_SIZE,
       ),
-    [history, historyPage],
+    [filteredHistory, historyPage],
   );
 
   useEffect(() => {
@@ -364,6 +441,19 @@ export default function App() {
     setHistoryPage((prev) => Math.min(prev, historyTotalPages));
   }, [historyTotalPages]);
 
+  useEffect(() => {
+    setPage(1);
+    setHistoryPage(1);
+  }, [selectedGuildId]);
+
+  const handleGuildChange = (event) => {
+    const nextId = event.target.value;
+    setSelectedGuildId(nextId);
+    localStorage.setItem(SELECTED_GUILD_KEY, nextId);
+    setConnectionState(statusByGuild[nextId] || 'disconnected');
+    setError(null);
+  };
+
   const beginLogin = () => {
     const features = 'width=520,height=720,menubar=no,location=no,status=no';
     loginWindowRef.current = window.open(`${apiBase}/auth/login`, 'discord-login', features);
@@ -372,8 +462,8 @@ export default function App() {
   const logout = () => {
     setSessionToken(null);
     setUser(null);
-    localStorage.removeItem('sessionToken');
-    localStorage.removeItem('sessionUser');
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    localStorage.removeItem(SESSION_USER_KEY);
   };
 
   const toggleFavorite = (event, sound) => {
@@ -435,7 +525,10 @@ export default function App() {
   };
 
   const volumeDisabled =
-    !user || connectionState === 'disconnected' || connectionState === 'connecting';
+    !user ||
+    !selectedGuildId ||
+    connectionState === 'disconnected' ||
+    connectionState === 'connecting';
 
   return (
     <div className="app">
@@ -450,8 +543,26 @@ export default function App() {
           <div>
             <p className="status-label">Estado</p>
             <p className="status-value">{statusLabel}</p>
-            {nowPlaying && <p className="now-playing">Reproduciendo: {nowPlaying}</p>}
+            {selectedNowPlaying && (
+              <p className="now-playing">Reproduciendo: {selectedNowPlaying}</p>
+            )}
           </div>
+        </div>
+        <div className="server-picker">
+          <label htmlFor="server-select">Servidor de Discord</label>
+          <select
+            id="server-select"
+            value={selectedGuildId || ''}
+            onChange={handleGuildChange}
+            aria-label="Seleccionar servidor"
+            disabled={!guilds.length}
+          >
+            {guilds.map((guild) => (
+              <option key={guild.id} value={guild.id}>
+                {guild.name || guild.id}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="auth">
           {user ? (
@@ -686,10 +797,12 @@ export default function App() {
                 <p className="eyebrow">Historial</p>
                 <h2>Últimas reproducciones</h2>
               </div>
-              <p className="history-count">{history.length} eventos</p>
+              <p className="history-count">{filteredHistory.length} eventos</p>
             </div>
-            {!history.length && <p className="empty-history">Todavía no hay reproducciones.</p>}
-            {history.length > 0 && (
+            {!filteredHistory.length && (
+              <p className="empty-history">Todavía no hay reproducciones para este servidor.</p>
+            )}
+            {filteredHistory.length > 0 && (
               <ul className="history-list">
                 {paginatedHistory.map((entry) => (
                   <li key={`${entry.at}-${entry.sound}`}>
@@ -720,7 +833,7 @@ export default function App() {
                 ))}
               </ul>
             )}
-            {history.length > HISTORY_PAGE_SIZE && (
+            {filteredHistory.length > HISTORY_PAGE_SIZE && (
               <div className="pagination">
                 <button
                   className="ghost icon-button"
