@@ -90,5 +90,7 @@ jobs:
           username: root
           key: ${{ secrets.SSH_SECRET }}
           port: 22222
-          source: "dist/**"
+          source: |
+            dist/*
+            dist/.*
           target: /var/www/botonera/
