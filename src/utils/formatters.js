@@ -16,7 +16,7 @@ function formatUserForClient(user) {
 
 function formatGuildForClient(id, client) {
   const guild = client?.guilds?.cache?.get?.(id);
-  return { id, name: guild?.name || id };
+  return { id, name: guild?.name || id, icon: guild?.icon || null };
 }
 
 module.exports = {

@@ -2,11 +2,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CaretDoubleLeft,
   CaretDoubleRight,
+  CaretDown,
   CaretLeft,
   CaretRight,
   Heart,
+  SignOut,
   SpeakerHigh,
 } from '@phosphor-icons/react';
+import { Avatar, AvatarFallback, AvatarImage } from './components/ui/avatar';
+import { Badge } from './components/ui/badge';
+import { Button } from './components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
+import { Input } from './components/ui/input';
+import { Label } from './components/ui/label';
+import { cn } from './lib/utils';
 
 const SESSION_TOKEN_KEY = 'sessionToken';
 const SESSION_USER_KEY = 'sessionUser';
@@ -103,6 +112,8 @@ export default function App() {
   });
   const socketRef = useRef(null);
   const loginWindowRef = useRef(null);
+  const guildMenuRef = useRef(null);
+  const [guildMenuOpen, setGuildMenuOpen] = useState(false);
 
   const statusLabel = useMemo(() => {
     const currentStatus = selectedGuildId ? statusByGuild[selectedGuildId] : connectionState;
@@ -115,6 +126,11 @@ export default function App() {
   const selectedNowPlaying = useMemo(
     () => (selectedGuildId ? nowPlayingByGuild[selectedGuildId] : null),
     [nowPlayingByGuild, selectedGuildId],
+  );
+
+  const selectedGuild = useMemo(
+    () => guilds.find((guild) => guild.id === selectedGuildId) || null,
+    [guilds, selectedGuildId],
   );
 
   useEffect(() => {
@@ -446,12 +462,40 @@ export default function App() {
     setHistoryPage(1);
   }, [selectedGuildId]);
 
-  const handleGuildChange = (event) => {
-    const nextId = event.target.value;
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (guildMenuRef.current && !guildMenuRef.current.contains(event.target)) {
+        setGuildMenuOpen(false);
+      }
+    };
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setGuildMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!guilds.length) {
+      setGuildMenuOpen(false);
+    }
+  }, [guilds.length]);
+
+  const handleGuildSelect = (nextId) => {
+    if (!nextId) return;
     setSelectedGuildId(nextId);
     localStorage.setItem(SELECTED_GUILD_KEY, nextId);
     setConnectionState(statusByGuild[nextId] || 'disconnected');
     setError(null);
+    setGuildMenuOpen(false);
+  };
+
+  const handleGuildChange = (event) => {
+    handleGuildSelect(event.target.value);
   };
 
   const beginLogin = () => {
@@ -460,7 +504,6 @@ export default function App() {
   };
 
   const logout = () => {
-    setUserMenuOpen(false);
     setSessionToken(null);
     setUser(null);
     localStorage.removeItem(SESSION_TOKEN_KEY);
@@ -482,10 +525,19 @@ export default function App() {
   const avatarUrl = (u) =>
     u?.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=64` : null;
 
-  const palette = ['tone-cyan', 'tone-purple', 'tone-green', 'tone-red'];
+  const guildIconUrl = (guild) =>
+    guild?.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=64` : null;
+
+  const guildInitial = (guild) => (guild?.name?.[0] || guild?.id?.[0] || '?').toUpperCase();
+
+  const palette = [
+    'ring-1 ring-indigo-400/40 hover:ring-indigo-300/60 shadow-indigo-500/20',
+    'ring-1 ring-emerald-400/35 hover:ring-emerald-300/55 shadow-emerald-500/20',
+    'ring-1 ring-sky-400/35 hover:ring-sky-300/55 shadow-sky-500/20',
+    'ring-1 ring-amber-400/35 hover:ring-amber-300/55 shadow-amber-500/20',
+    'ring-1 ring-rose-400/35 hover:ring-rose-300/55 shadow-rose-500/20',
+  ];
   const [draggingSound, setDraggingSound] = useState(null);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const userMenuRef = useRef(null);
 
   const handleDragStart = (event, sound) => {
     event.dataTransfer?.setData('text/plain', sound);
@@ -521,16 +573,6 @@ export default function App() {
     }
   }, [user]);
 
-  useEffect(() => {
-    const handler = (event) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
-        setUserMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
   const handleVolumeChange = (event) => {
     const next = Number(event.target.value);
     setVolume(next);
@@ -543,363 +585,589 @@ export default function App() {
     connectionState === 'disconnected' ||
     connectionState === 'connecting';
 
+  const statusTone = useMemo(
+    () =>
+      ({
+        ready: { badge: 'success', dot: 'bg-emerald-400' },
+        waiting: { badge: 'warning', dot: 'bg-amber-300' },
+        connecting: { badge: 'secondary', dot: 'bg-sky-200' },
+        connected: { badge: 'secondary', dot: 'bg-sky-300' },
+        disconnected: { badge: 'danger', dot: 'bg-rose-400' },
+      }[connectionState] || { badge: 'danger', dot: 'bg-rose-400' }),
+    [connectionState],
+  );
+
   return (
-    <div className="app">
-      <header className="header">
-        <div className="brand">
-          <img src="/botonera.png" alt="Botonera" className="brand-logo" />
-        </div>
-        <div className="header-row">
-          <div className="status-hub">
-            <div className="status-card status-block">
-              <div className={`status-dot status-${connectionState}`} />
+    <div className="min-h-screen pb-12">
+      <div className="container space-y-6 py-8">
+        <header className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="relative h-14 w-14 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-indigo-500/40 via-slate-900 to-slate-950 shadow-lg">
+              <img src="/botonera.png" alt="Botonera" className="h-full w-full object-contain" />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-500/25 via-transparent to-cyan-500/20" />
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground">Botonera</p>
+              <h1 className="text-2xl font-semibold leading-tight sm:text-3xl">Panel de sonidos</h1>
+              <p className="text-sm text-muted-foreground">
+                Reproduce efectos y controla el bot en tus servidores de Discord.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-full border border-border/60 bg-slate-900/60 px-3 py-1.5 text-sm shadow-soft">
+              <span className={cn('h-2 w-2 rounded-full', statusTone.dot)} aria-hidden />
+              <span className="font-medium">{statusLabel}</span>
+            </div>
+            <Badge variant="secondary" className="hidden sm:inline-flex">
+              {guilds.length ? `${guilds.length} servidores` : 'Sin servidores'}
+            </Badge>
+          </div>
+        </header>
+
+        {error && (
+          <Card className="border-destructive/40 bg-destructive/15 text-destructive-foreground">
+            <CardContent className="flex items-start gap-3 py-4">
+              <div className="mt-0.5 h-2.5 w-2.5 rounded-full bg-destructive" aria-hidden />
               <div>
-                <p className="status-label">Estado</p>
-                <p className="status-value">{statusLabel}</p>
-                {selectedNowPlaying && (
-                  <p className="now-playing">Reproduciendo: {selectedNowPlaying}</p>
-                )}
+                <p className="font-semibold">Algo salió mal</p>
+                <p className="text-sm">{error}</p>
               </div>
-            </div>
-            <div className="status-block server-picker">
-              <label htmlFor="server-select">Servidor de Discord</label>
-              <select
-                id="server-select"
-                value={selectedGuildId || ''}
-                onChange={handleGuildChange}
-                aria-label="Seleccionar servidor"
-                disabled={!guilds.length}
-              >
-                {guilds.map((guild) => (
-                  <option key={guild.id} value={guild.id}>
-                    {guild.name || guild.id}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {user ? (
-              <div className="status-block user-menu" ref={userMenuRef}>
-                <button
-                  type="button"
-                  className="user-pill user-trigger"
-                  title={user.id}
-                  onClick={() => setUserMenuOpen((open) => !open)}
-                  aria-expanded={userMenuOpen}
-                  aria-haspopup="menu"
-                >
-                  {avatarUrl(user) ? (
-                    <img className="avatar-img" src={avatarUrl(user)} alt={user.username} />
-                  ) : (
-                    <span className="avatar-fallback">
-                      {user.globalName?.[0] || user.username?.[0] || '?'}
-                    </span>
-                  )}
-                  <div>
-                    <p className="user-label">Conectado</p>
-                    <p className="user-name">{user.globalName || user.username}</p>
-                  </div>
-                  <span className="chevron" aria-hidden />
-                </button>
-                {userMenuOpen ? (
-                  <div className="user-dropdown" role="menu">
-                    <button type="button" role="menuitem" onClick={logout}>
-                      Salir
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </header>
+            </CardContent>
+          </Card>
+        )}
 
-      {error && <div className="error">{error}</div>}
-
-      {!user ? (
-        <section className="login-screen">
-          <div className="login-card">
-            <p className="eyebrow">Acceso requerido</p>
-            <h2>{authLoading ? 'Restaurando sesión...' : 'Conecta con Discord'}</h2>
-            <p className="subtitle">
-              Inicia sesión para cargar la botonera y registrar quién dispara cada sonido.
-            </p>
-            <button className="primary" onClick={beginLogin} disabled={authLoading}>
-              {authLoading ? 'Verificando...' : 'Conectar con Discord'}
-            </button>
-          </div>
-        </section>
-      ) : (
-        <>
-          {favorites.length > 0 && (
-            <section className="favorites">
-              <div className="section-header">
-                <div>
-                  <p className="eyebrow">Favoritos</p>
-                </div>
-                <p className="section-count">
-                  {filteredFavorites.length} / {favoriteSounds.length}
-                </p>
-              </div>
-              {filteredFavorites.length ? (
-                <div className="grid favorites-grid">
-                  {filteredFavorites.map((sound, idx) => (
-                    <button
-                      key={sound}
-                      className={`sound-button ${palette[idx % palette.length]}`}
-                      onClick={() => sendPlay(sound)}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, sound)}
-                      onDragEnd={handleDragEnd}
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleDrop(e, sound)}
-                      data-dragging={draggingSound === sound}
-                      disabled={
-                        connectionState === 'disconnected' || connectionState === 'connecting'
-                      }
-                      title={sound}
-                    >
-                      {favoriteKeyBySound[sound] && (
-                        <span className="favorite-key" aria-hidden="true">
-                          {favoriteKeyBySound[sound]}
-                        </span>
-                      )}
-                      <span
-                        className="favorite-toggle"
-                        onClick={(e) => toggleFavorite(e, sound)}
-                        title={
-                          favorites.includes(sound)
-                            ? 'Quitar de favoritos'
-                            : 'Agregar a favoritos'
-                        }
+        {!user ? (
+          <Card className="overflow-hidden border-dashed border-border/70 bg-card/70 shadow-soft">
+            <CardHeader className="space-y-3">
+              <Badge variant="secondary" className="w-fit">
+                Acceso requerido
+              </Badge>
+              <CardTitle>{authLoading ? 'Restaurando sesión...' : 'Conecta con Discord'}</CardTitle>
+              <CardDescription>
+                Inicia sesión para cargar la botonera y registrar quién reproduce cada sonido.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Guardamos tu sesión en este navegador para que no tengas que reautenticarte cada vez.
+              </p>
+              <Button size="lg" onClick={beginLogin} disabled={authLoading}>
+                {authLoading ? 'Verificando...' : 'Conectar con Discord'}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+              <Card className="relative z-40 overflow-visible">
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-cyan-400 to-emerald-400" />
+                <CardHeader className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                        Actividad del bot
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {selectedNowPlaying ? (
+                          <Badge variant="secondary" className="bg-slate-800/80">
+                            <SpeakerHigh size={16} weight="fill" className="mr-1" />
+                            Reproduciendo: {selectedNowPlaying}
+                          </Badge>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">Sin reproducción activa.</p>
+                        )}
+                      </div>
+                    </div>
+                    <Badge variant="muted">Sesión activa</Badge>
+                  </div>
+                  <CardDescription>
+                    Conéctate al canal de voz en Discord con{' '}
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-semibold">
+                      /join
+                    </code>
+                    . Desde aquí controlas las colas de sonido y el volumen.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="server-select">Servidor de Discord</Label>
+                    <div className="relative z-30" ref={guildMenuRef}>
+                      <button
+                        type="button"
+                        onClick={() => setGuildMenuOpen((open) => !open)}
+                        disabled={!guilds.length}
+                        aria-expanded={guildMenuOpen}
+                        aria-haspopup="listbox"
+                        className="flex w-full min-h-[86px] items-center gap-3 rounded-xl border border-border bg-slate-900/70 px-3 py-3 text-left text-sm font-medium text-foreground shadow-soft outline-none transition hover:border-primary/50 hover:shadow-lg focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-60"
                       >
-                        <Heart
+                        <Avatar className="h-9 w-9 ring-1 ring-white/5">
+                          {guildIconUrl(selectedGuild) ? (
+                            <AvatarImage
+                              src={guildIconUrl(selectedGuild)}
+                              alt={selectedGuild?.name}
+                            />
+                          ) : (
+                            <AvatarFallback>{guildInitial(selectedGuild)}</AvatarFallback>
+                          )}
+                        </Avatar>
+                        <div className="flex flex-1 flex-col text-left">
+                          <span className="text-sm font-semibold leading-tight">
+                            {selectedGuild?.name || 'Selecciona un servidor'}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {guilds.length ? 'Elige dónde reproducir' : 'Sin servidores disponibles'}
+                          </span>
+                        </div>
+                        <CaretDown
                           size={18}
-                          weight={favorites.includes(sound) ? 'fill' : 'regular'}
-                          className="favorite-icon"
+                          className={cn(
+                            'text-muted-foreground transition duration-200',
+                            guildMenuOpen ? 'rotate-180 text-primary' : '',
+                          )}
                           aria-hidden
                         />
-                        <span className="sr-only">
-                          {favorites.includes(sound)
-                            ? 'Quitar de favoritos'
-                            : 'Agregar a favoritos'}
-                        </span>
-                      </span>
-                      <span className="sound-name">{sound.replace(/\.[^/.]+$/, '')}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="empty-favorites">No hay favoritos que coincidan con la búsqueda.</p>
-              )}
-            </section>
-          )}
-
-          <div className="toolbar">
-            <div className="search">
-              <input
-                type="search"
-                placeholder="Buscar sonidos..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              <span className="search-count">
-                {filteredTotalCount} / {sounds.length}
-              </span>
-            </div>
-            <div className="volume-control" aria-live="polite">
-              <label htmlFor="volume-slider">Volumen</label>
-              <input
-                id="volume-slider"
-                type="range"
-                min="0"
-                max="100"
-                value={volume}
-                onChange={handleVolumeChange}
-                disabled={volumeDisabled}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={volume}
-              />
-              <span className="volume-value">{volume}%</span>
-            </div>
-          </div>
-
-          <section className="grid">
-            {paginatedNonFavorites.map((sound, idx) => (
-              <button
-                key={sound}
-                className={`sound-button ${palette[idx % palette.length]}`}
-                onClick={() => sendPlay(sound)}
-                disabled={connectionState === 'disconnected' || connectionState === 'connecting'}
-                title={sound}
-              >
-                <span
-                  className="favorite-toggle"
-                  onClick={(e) => toggleFavorite(e, sound)}
-                  title={
-                    favorites.includes(sound)
-                      ? 'Quitar de favoritos'
-                      : 'Agregar a favoritos'
-                  }
-                >
-                  <Heart
-                    size={18}
-                    weight={favorites.includes(sound) ? 'fill' : 'regular'}
-                    className="favorite-icon"
-                    aria-hidden
-                  />
-                  <span className="sr-only">
-                    {favorites.includes(sound)
-                      ? 'Quitar de favoritos'
-                      : 'Agregar a favoritos'}
-                  </span>
-                </span>
-                <span className="sound-name">{sound.replace(/\.[^/.]+$/, '')}</span>
-              </button>
-            ))}
-            {!sounds.length ? (
-              <div className="empty">
-                <p>
-                  No se encontraron sonidos en la carpeta <code>sounds/</code>.
-                </p>
-                <p>Agrega archivos (mp3, wav, ogg, flac) y vuelve a cargar.</p>
-              </div>
-            ) : null}
-            {sounds.length > 0 && !filteredNonFavorites.length && (
-              <div className="empty">
-                <p>
-                  {query.trim()
-                    ? 'No hay sonidos que coincidan con la búsqueda (fuera de favoritos).'
-                    : 'Todos tus sonidos están marcados como favoritos.'}
-                </p>
-              </div>
-            )}
-          </section>
-
-          {filteredNonFavorites.length > PAGE_SIZE && (
-            <div className="pagination">
-              <button
-                className="ghost icon-button"
-                onClick={() => setPage(1)}
-                disabled={page === 1}
-                aria-label="Primera página"
-              >
-                <CaretDoubleLeft size={18} />
-              </button>
-              <button
-                className="ghost icon-button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                aria-label="Página anterior"
-              >
-                <CaretLeft size={18} />
-              </button>
-              <span className="page-indicator">
-                Página {page} de {totalPages}
-              </span>
-              <button
-                className="ghost icon-button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                aria-label="Página siguiente"
-              >
-                <CaretRight size={18} />
-              </button>
-              <button
-                className="ghost icon-button"
-                onClick={() => setPage(totalPages)}
-                disabled={page === totalPages}
-                aria-label="Última página"
-              >
-                <CaretDoubleRight size={18} />
-              </button>
-            </div>
-          )}
-
-          <section className="history">
-            <div className="history-header">
-              <div>
-                <p className="eyebrow">Historial</p>
-                <h2>Últimas reproducciones</h2>
-              </div>
-              <p className="history-count">{filteredHistory.length} eventos</p>
-            </div>
-            {!filteredHistory.length && (
-              <p className="empty-history">Todavía no hay reproducciones para este servidor.</p>
-            )}
-            {filteredHistory.length > 0 && (
-              <ul className="history-list">
-                {paginatedHistory.map((entry) => (
-                  <li key={`${entry.at}-${entry.sound}`}>
-                    {avatarUrl(entry.user) ? (
-                      <img
-                        className="history-avatar"
-                        src={avatarUrl(entry.user)}
-                        alt={entry.user.username}
-                      />
-                    ) : (
-                      <div className="history-avatar">
-                        {entry.user.globalName?.[0] || entry.user.username?.[0] || '?'}
-                      </div>
-                    )}
-                    <div className="history-body">
-                      <p className="history-user">{entry.user.globalName || entry.user.username}</p>
-                      <p className="history-meta">
-                        <SpeakerHigh
-                          size={18}
-                          weight="fill"
-                          className="history-icon"
-                          aria-label="disparó"
-                        />{' '}
-                        <strong>{entry.sound}</strong> · {historyLabel(entry)}
-                      </p>
+                      </button>
+                      {guildMenuOpen && (
+                        <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-border/70 bg-slate-900/95 shadow-2xl backdrop-blur">
+                          <ul
+                            className="max-h-64 overflow-auto p-1"
+                            role="listbox"
+                            aria-label="Servidores de Discord"
+                          >
+                            {guilds.length ? (
+                              guilds.map((guild) => {
+                                const active = guild.id === selectedGuildId;
+                                return (
+                                  <li key={guild.id}>
+                                    <button
+                                      type="button"
+                                      className={cn(
+                                        'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                                        active
+                                          ? 'bg-primary/10 text-primary'
+                                          : 'text-foreground hover:bg-slate-800/70',
+                                      )}
+                                      onClick={() => handleGuildSelect(guild.id)}
+                                      role="option"
+                                      aria-selected={active}
+                                    >
+                                      <Avatar className="h-9 w-9 ring-1 ring-white/5">
+                                        {guildIconUrl(guild) ? (
+                                          <AvatarImage src={guildIconUrl(guild)} alt={guild.name} />
+                                        ) : (
+                                          <AvatarFallback>{guildInitial(guild)}</AvatarFallback>
+                                        )}
+                                      </Avatar>
+                                      <div className="flex flex-col">
+                                        <span className="text-sm font-semibold leading-tight">
+                                          {guild.name || guild.id}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                          {active ? 'Seleccionado' : 'Haz clic para conectar'}
+                                        </span>
+                                      </div>
+                                    </button>
+                                  </li>
+                                );
+                              })
+                            ) : (
+                              <li className="px-3 py-3 text-sm text-muted-foreground">
+                                No hay servidores disponibles.
+                              </li>
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                      <select
+                        id="server-select"
+                        value={selectedGuildId || ''}
+                        onChange={handleGuildChange}
+                        className="sr-only"
+                        aria-hidden="true"
+                        tabIndex={-1}
+                      >
+                        {guilds.map((guild) => (
+                          <option key={guild.id} value={guild.id}>
+                            {guild.name || guild.id}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  </li>
+                  </div>
+                    <div className="space-y-2" aria-live="polite">
+                      <Label htmlFor="volume-slider">Volumen</Label>
+                      <div className="flex min-h-[86px] items-center gap-3 rounded-xl border border-border/60 bg-slate-900/50 px-3 py-3 shadow-soft">
+                        <input
+                          id="volume-slider"
+                          type="range"
+                          min="0"
+                          max="100"
+                        value={volume}
+                        onChange={handleVolumeChange}
+                        disabled={volumeDisabled}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={volume}
+                        className="flex-1"
+                      />
+                      <Badge variant="secondary" className="shrink-0">
+                        {volume}%
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-soft">
+                <CardHeader className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-12 w-12">
+                        {avatarUrl(user) ? (
+                          <AvatarImage src={avatarUrl(user)} alt={user.username} />
+                        ) : (
+                          <AvatarFallback>
+                            {user.globalName?.[0] || user.username?.[0] || '?'}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                          Conectado como
+                        </p>
+                        <p className="text-lg font-semibold leading-tight">
+                          {user.globalName || user.username}
+                        </p>
+                        <p className="text-sm text-muted-foreground">ID: {user.id}</p>
+                      </div>
+                    </div>
+                    <Button variant="secondary" size="sm" onClick={logout}>
+                      <SignOut size={16} weight="bold" className="mr-2" />
+                      Cerrar sesión
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="muted">{sounds.length} sonidos</Badge>
+                    <Badge variant="muted">{favorites.length} favoritos</Badge>
+                  </div>
+                  <CardDescription>
+                    La sesión se guarda localmente. Puedes cerrar sesión en cualquier momento.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            </div>
+
+            {favorites.length > 0 && (
+              <Card className="border-border/70 bg-card/70 shadow-soft">
+                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <CardTitle className="text-xl font-semibold">Favoritos</CardTitle>
+                  <Badge variant="secondary">
+                    {filteredFavorites.length} / {favoriteSounds.length}
+                  </Badge>
+                </CardHeader>
+                <CardContent className="favorites-grid grid gap-4">
+                  {filteredFavorites.length ? (
+                    filteredFavorites.map((sound, idx) => (
+                      <button
+                        key={sound}
+                        className={cn('sound-tile', palette[idx % palette.length])}
+                        onClick={() => sendPlay(sound)}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, sound)}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, sound)}
+                        data-dragging={draggingSound === sound}
+                        disabled={
+                          connectionState === 'disconnected' || connectionState === 'connecting'
+                        }
+                        title={sound}
+                      >
+                        {favoriteKeyBySound[sound] && (
+                          <span className="favorite-key" aria-hidden="true">
+                            {favoriteKeyBySound[sound]}
+                          </span>
+                        )}
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="favorite-toggle-btn"
+                          aria-pressed={favorites.includes(sound)}
+                          aria-label={
+                            favorites.includes(sound)
+                              ? 'Quitar de favoritos'
+                              : 'Agregar a favoritos'
+                          }
+                          title={
+                            favorites.includes(sound)
+                              ? 'Quitar de favoritos'
+                              : 'Agregar a favoritos'
+                          }
+                          onClick={(e) => toggleFavorite(e, sound)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              toggleFavorite(e, sound);
+                            }
+                          }}
+                        >
+                          <Heart
+                            size={14}
+                            weight={favorites.includes(sound) ? 'fill' : 'regular'}
+                            className="text-pink-200"
+                            aria-hidden
+                          />
+                          <span className="sr-only">
+                            {favorites.includes(sound)
+                              ? 'Quitar de favoritos'
+                              : 'Agregar a favoritos'}
+                          </span>
+                        </span>
+                        <span className="sound-name">{sound.replace(/\.[^/.]+$/, '')}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="col-span-full text-sm text-muted-foreground">
+                      No hay favoritos que coincidan con la búsqueda.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            <Card className="border-border/70 bg-card/70 shadow-soft">
+              <CardHeader className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="min-w-[220px] flex-1">
+                    <Label htmlFor="search">Buscar sonidos</Label>
+                    <Input
+                      id="search"
+                      type="search"
+                      placeholder="Filtrar sonidos..."
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="muted">
+                      {filteredTotalCount} / {sounds.length} sonidos
+                    </Badge>
+                    <Badge variant="muted">
+                      Página {page} de {totalPages}
+                    </Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+                {paginatedNonFavorites.map((sound, idx) => (
+                  <button
+                    key={sound}
+                    className={cn('sound-tile', palette[idx % palette.length])}
+                    onClick={() => sendPlay(sound)}
+                    disabled={connectionState === 'disconnected' || connectionState === 'connecting'}
+                    title={sound}
+                  >
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="favorite-toggle-btn"
+                      aria-pressed={favorites.includes(sound)}
+                      aria-label={
+                        favorites.includes(sound)
+                          ? 'Quitar de favoritos'
+                          : 'Agregar a favoritos'
+                      }
+                      title={
+                        favorites.includes(sound) ? 'Quitar de favoritos' : 'Agregar a favoritos'
+                      }
+                      onClick={(e) => toggleFavorite(e, sound)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleFavorite(e, sound);
+                        }
+                      }}
+                    >
+                      <Heart
+                        size={14}
+                        weight={favorites.includes(sound) ? 'fill' : 'regular'}
+                        className="text-pink-200"
+                        aria-hidden
+                      />
+                      <span className="sr-only">
+                        {favorites.includes(sound)
+                          ? 'Quitar de favoritos'
+                          : 'Agregar a favoritos'}
+                      </span>
+                    </span>
+                    <span className="sound-name">{sound.replace(/\.[^/.]+$/, '')}</span>
+                  </button>
                 ))}
-              </ul>
-            )}
-            {filteredHistory.length > HISTORY_PAGE_SIZE && (
-              <div className="pagination">
-                <button
-                  className="ghost icon-button"
-                  onClick={() => setHistoryPage(1)}
-                  disabled={historyPage === 1}
-                  aria-label="Primera página de historial"
-                >
-                  <CaretDoubleLeft size={18} />
-                </button>
-                <button
-                  className="ghost icon-button"
-                  onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
-                  disabled={historyPage === 1}
-                  aria-label="Página anterior de historial"
-                >
-                  <CaretLeft size={18} />
-                </button>
-                <span className="page-indicator">
-                  Página {historyPage} de {historyTotalPages}
-                </span>
-                <button
-                  className="ghost icon-button"
-                  onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
-                  disabled={historyPage === historyTotalPages}
-                  aria-label="Página siguiente de historial"
-                >
-                  <CaretRight size={18} />
-                </button>
-                <button
-                  className="ghost icon-button"
-                  onClick={() => setHistoryPage(historyTotalPages)}
-                  disabled={historyPage === historyTotalPages}
-                  aria-label="Última página de historial"
-                >
-                  <CaretDoubleRight size={18} />
-                </button>
-              </div>
-            )}
-          </section>
-        </>
-      )}
+                {!sounds.length ? (
+                  <div className="col-span-full rounded-lg border border-dashed border-border/70 bg-slate-900/40 px-4 py-6 text-center text-sm text-muted-foreground">
+                    <p>
+                      No se encontraron sonidos en la carpeta <code>sounds/</code>.
+                    </p>
+                    <p className="mt-1">
+                      Agrega archivos (mp3, wav, ogg, flac) y vuelve a cargar.
+                    </p>
+                  </div>
+                ) : null}
+                {sounds.length > 0 && !filteredNonFavorites.length && (
+                  <div className="col-span-full rounded-lg border border-dashed border-border/70 bg-slate-900/40 px-4 py-6 text-center text-sm text-muted-foreground">
+                    <p>
+                      {query.trim()
+                        ? 'No hay sonidos que coincidan con la búsqueda (fuera de favoritos).'
+                        : 'Todos tus sonidos están marcados como favoritos.'}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+              {filteredNonFavorites.length > PAGE_SIZE && (
+                <div className="flex items-center justify-center gap-2 pb-4">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setPage(1)}
+                    disabled={page === 1}
+                    aria-label="Primera página"
+                  >
+                    <CaretDoubleLeft size={18} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    aria-label="Página anterior"
+                  >
+                    <CaretLeft size={18} />
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Página {page} de {totalPages}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    aria-label="Página siguiente"
+                  >
+                    <CaretRight size={18} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setPage(totalPages)}
+                    disabled={page === totalPages}
+                    aria-label="Última página"
+                  >
+                    <CaretDoubleRight size={18} />
+                  </Button>
+                </div>
+              )}
+            </Card>
+
+            <Card className="border-border/70 bg-card/70 shadow-soft">
+              <CardHeader className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                    Historial
+                  </p>
+                  <CardTitle className="text-xl font-semibold">Últimas reproducciones</CardTitle>
+                  <CardDescription>Mira quién reprodujo cada sonido por servidor.</CardDescription>
+                </div>
+                <Badge variant="muted">{filteredHistory.length} eventos</Badge>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!filteredHistory.length && (
+                  <p className="text-sm text-muted-foreground">
+                    Todavía no hay reproducciones para este servidor.
+                  </p>
+                )}
+                {filteredHistory.length > 0 && (
+                  <ul className="space-y-3">
+                    {paginatedHistory.map((entry) => (
+                      <li
+                        key={`${entry.at}-${entry.sound}`}
+                        className="flex items-center gap-3 rounded-lg border border-border/70 bg-slate-900/60 px-3 py-3"
+                      >
+                        <Avatar className="h-10 w-10">
+                          {avatarUrl(entry.user) ? (
+                            <AvatarImage src={avatarUrl(entry.user)} alt={entry.user.username} />
+                          ) : (
+                            <AvatarFallback>
+                              {entry.user.globalName?.[0] || entry.user.username?.[0] || '?'}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                        <div className="flex flex-1 flex-col">
+                          <p className="text-sm font-semibold">
+                            {entry.user.globalName || entry.user.username}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            <SpeakerHigh
+                              size={16}
+                              weight="fill"
+                              className="mr-1 inline align-middle text-primary"
+                              aria-label="disparó"
+                            />
+                            <strong className="font-semibold">{entry.sound}</strong> · {historyLabel(entry)}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {filteredHistory.length > HISTORY_PAGE_SIZE && (
+                  <div className="flex items-center justify-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setHistoryPage(1)}
+                      disabled={historyPage === 1}
+                      aria-label="Primera página de historial"
+                    >
+                      <CaretDoubleLeft size={18} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                      disabled={historyPage === 1}
+                      aria-label="Página anterior de historial"
+                    >
+                      <CaretLeft size={18} />
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Página {historyPage} de {historyTotalPages}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
+                      disabled={historyPage === historyTotalPages}
+                      aria-label="Página siguiente de historial"
+                    >
+                      <CaretRight size={18} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setHistoryPage(historyTotalPages)}
+                      disabled={historyPage === historyTotalPages}
+                      aria-label="Última página de historial"
+                    >
+                      <CaretDoubleRight size={18} />
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
     </div>
   );
 }
