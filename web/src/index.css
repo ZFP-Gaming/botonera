@@ -63,7 +63,7 @@
 
 @layer components {
   .sound-tile {
-    @apply relative flex h-full w-full flex-col justify-end overflow-hidden rounded-xl border border-border/70 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-slate-950/70 p-4 text-left shadow-lg transition duration-150 ease-out hover:-translate-y-1 hover:border-primary/50 hover:shadow-xl active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed;
+    @apply relative flex h-full min-h-[88px] w-full flex-col justify-end overflow-hidden rounded-xl border border-border/70 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-slate-950/70 p-5 text-left shadow-lg transition duration-150 ease-out hover:-translate-y-1 hover:border-primary/50 hover:shadow-xl active:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed;
     backdrop-filter: blur(8px);
   }
 
@@ -86,15 +86,15 @@
   }
 
   .favorite-key {
-    @apply absolute left-3 top-3 rounded-md bg-black/50 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-100 shadow-sm ring-1 ring-white/10;
+    @apply absolute left-3 top-3 rounded-md bg-black/50 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-slate-100 shadow-sm ring-1 ring-white/10;
   }
 
   .favorite-toggle-btn {
-    @apply absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/30 text-pink-100 shadow backdrop-blur transition hover:border-pink-200/40 hover:text-pink-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+    @apply absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/30 text-pink-100 shadow backdrop-blur transition hover:border-pink-200/40 hover:text-pink-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
   }
 
   .sound-name {
-    @apply z-10 line-clamp-2 text-base font-semibold leading-tight text-slate-50 drop-shadow;
+    @apply z-10 line-clamp-2 text-lg font-semibold leading-snug text-slate-50 drop-shadow;
   }
 
   .range-track {

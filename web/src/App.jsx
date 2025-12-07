@@ -637,16 +637,17 @@ export default function App() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                        Estado del bot
+                        Actividad del bot
                       </p>
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={statusTone.badge}>{statusLabel}</Badge>
                         {selectedNowPlaying ? (
                           <Badge variant="secondary" className="bg-slate-800/80">
                             <SpeakerHigh size={16} weight="fill" className="mr-1" />
                             Reproduciendo: {selectedNowPlaying}
                           </Badge>
-                        ) : null}
+                        ) : (
+                          <p className="text-sm text-muted-foreground">Sin reproducción activa.</p>
+                        )}
                       </div>
                     </div>
                     <Badge variant="muted">Sesión activa</Badge>
@@ -764,20 +765,12 @@ export default function App() {
             {favorites.length > 0 && (
               <Card className="border-border/70 bg-card/70 shadow-soft">
                 <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                      Favoritos
-                    </p>
-                    <CardTitle className="text-xl font-semibold">Accesos rápidos</CardTitle>
-                    <CardDescription>
-                      Arrastra para reordenar y usa las teclas indicadas para lanzar al vuelo.
-                    </CardDescription>
-                  </div>
+                  <CardTitle className="text-xl font-semibold">Favoritos</CardTitle>
                   <Badge variant="secondary">
                     {filteredFavorites.length} / {favoriteSounds.length}
                   </Badge>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                   {filteredFavorites.length ? (
                     filteredFavorites.map((sound, idx) => (
                       <button
@@ -857,7 +850,7 @@ export default function App() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7">
+              <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
                 {paginatedNonFavorites.map((sound, idx) => (
                   <button
                     key={sound}
