@@ -45,6 +45,27 @@ jobs:
           name: web-dist
           path: dist
 
+      - name: Flatten artifact layout
+        run: |
+          set -e
+          shopt -s dotglob
+          if [ -d dist/web/dist ]; then
+            mkdir -p dist-flat
+            mv dist/web/dist/* dist-flat/
+            mv dist/web/dist/.[!.]* dist-flat/ 2>/dev/null || true
+            mv dist/web/dist/..?* dist-flat/ 2>/dev/null || true
+            rm -rf dist
+            mv dist-flat dist
+          elif [ -d dist/dist ]; then
+            mkdir -p dist-flat
+            mv dist/dist/* dist-flat/
+            mv dist/dist/.[!.]* dist-flat/ 2>/dev/null || true
+            mv dist/dist/..?* dist-flat/ 2>/dev/null || true
+            rm -rf dist
+            mv dist-flat dist
+          fi
+          ls -la dist
+
       - name: Update backend and prepare web folder
         uses: appleboy/ssh-action@v0.1.10
         with:
@@ -69,5 +90,5 @@ jobs:
           username: root
           key: ${{ secrets.SSH_SECRET }}
           port: 22222
-          source: "dist/*"
+          source: "dist/**"
           target: /var/www/botonera/
