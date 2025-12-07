@@ -1,3 +1,9 @@
+// TODO: Remove this polyfill once the runtime is upgraded to Node 18+ (proper ReadableStream global).
+const { ReadableStream, WritableStream, TransformStream } = require('stream/web');
+global.ReadableStream ??= ReadableStream;
+global.WritableStream ??= WritableStream;
+global.TransformStream ??= TransformStream;
+
 const config = require('./config/config');
 const { createSoundLibrary } = require('./services/soundLibrary');
 const { createSessionService } = require('./services/sessionService');
