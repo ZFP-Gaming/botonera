@@ -24,10 +24,34 @@ body {
 
 .header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
   margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 140px;
+}
+
+.brand-logo {
+  width: 180px;
+  max-width: 100%;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.35));
+}
+
+.header-row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
@@ -214,6 +238,10 @@ h1 {
   flex-wrap: wrap;
 }
 
+.user-menu {
+  position: relative;
+}
+
 .primary,
 .ghost {
   border-radius: 12px;
@@ -257,6 +285,29 @@ h1 {
   padding: 8px 12px;
   border-radius: 12px;
   min-width: 160px;
+  color: #f7f7f7;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
+}
+
+.user-trigger {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: rgba(255, 255, 255, 0.08);
+  position: relative;
+  padding-right: 38px;
+}
+
+.user-trigger:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.03);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.32);
+}
+
+.user-trigger:focus-visible {
+  box-shadow: 0 0 0 3px rgba(159, 179, 255, 0.3);
 }
 
 .avatar-fallback {
@@ -288,6 +339,45 @@ h1 {
 .user-name {
   margin: 2px 0 0;
   font-weight: 700;
+}
+
+.chevron {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-45deg);
+  width: 10px;
+  height: 10px;
+  border-left: 2px solid #cbd2e0;
+  border-bottom: 2px solid #cbd2e0;
+}
+
+.user-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  background: rgba(8, 10, 16, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 6px;
+  min-width: 160px;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.3);
+  z-index: 2;
+}
+
+.user-dropdown button {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #f7f7f7;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.user-dropdown button:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .grid {

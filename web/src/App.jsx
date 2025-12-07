@@ -460,6 +460,7 @@ export default function App() {
   };
 
   const logout = () => {
+    setUserMenuOpen(false);
     setSessionToken(null);
     setUser(null);
     localStorage.removeItem(SESSION_TOKEN_KEY);
@@ -483,6 +484,8 @@ export default function App() {
 
   const palette = ['tone-cyan', 'tone-purple', 'tone-green', 'tone-red'];
   const [draggingSound, setDraggingSound] = useState(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
 
   const handleDragStart = (event, sound) => {
     event.dataTransfer?.setData('text/plain', sound);
@@ -518,6 +521,16 @@ export default function App() {
     }
   }, [user]);
 
+  useEffect(() => {
+    const handler = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   const handleVolumeChange = (event) => {
     const next = Number(event.target.value);
     setVolume(next);
@@ -533,41 +546,46 @@ export default function App() {
   return (
     <div className="app">
       <header className="header">
-        <div>
-          <p className="eyebrow">Botonera de Discord</p>
-          <h1>Panel de la Botonera</h1>
-          <p className="subtitle">Lanza sonidos en Discord directo desde tu navegador.</p>
+        <div className="brand">
+          <img src="/botonera.png" alt="Botonera" className="brand-logo" />
         </div>
-        <div className="status-card">
-          <div className={`status-dot status-${connectionState}`} />
-          <div>
-            <p className="status-label">Estado</p>
-            <p className="status-value">{statusLabel}</p>
-            {selectedNowPlaying && (
-              <p className="now-playing">Reproduciendo: {selectedNowPlaying}</p>
-            )}
+        <div className="header-row">
+          <div className="status-card">
+            <div className={`status-dot status-${connectionState}`} />
+            <div>
+              <p className="status-label">Estado</p>
+              <p className="status-value">{statusLabel}</p>
+              {selectedNowPlaying && (
+                <p className="now-playing">Reproduciendo: {selectedNowPlaying}</p>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="server-picker">
-          <label htmlFor="server-select">Servidor de Discord</label>
-          <select
-            id="server-select"
-            value={selectedGuildId || ''}
-            onChange={handleGuildChange}
-            aria-label="Seleccionar servidor"
-            disabled={!guilds.length}
-          >
-            {guilds.map((guild) => (
-              <option key={guild.id} value={guild.id}>
-                {guild.name || guild.id}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="auth">
+          <div className="server-picker">
+            <label htmlFor="server-select">Servidor de Discord</label>
+            <select
+              id="server-select"
+              value={selectedGuildId || ''}
+              onChange={handleGuildChange}
+              aria-label="Seleccionar servidor"
+              disabled={!guilds.length}
+            >
+              {guilds.map((guild) => (
+                <option key={guild.id} value={guild.id}>
+                  {guild.name || guild.id}
+                </option>
+              ))}
+            </select>
+          </div>
           {user ? (
-            <>
-              <div className="user-pill" title={user.id}>
+            <div className="user-menu" ref={userMenuRef}>
+              <button
+                type="button"
+                className="user-pill user-trigger"
+                title={user.id}
+                onClick={() => setUserMenuOpen((open) => !open)}
+                aria-expanded={userMenuOpen}
+                aria-haspopup="menu"
+              >
                 {avatarUrl(user) ? (
                   <img className="avatar-img" src={avatarUrl(user)} alt={user.username} />
                 ) : (
@@ -579,11 +597,16 @@ export default function App() {
                   <p className="user-label">Conectado</p>
                   <p className="user-name">{user.globalName || user.username}</p>
                 </div>
-              </div>
-              <button className="ghost" onClick={logout}>
-                Salir
+                <span className="chevron" aria-hidden />
               </button>
-            </>
+              {userMenuOpen ? (
+                <div className="user-dropdown" role="menu">
+                  <button type="button" role="menuitem" onClick={logout}>
+                    Salir
+                  </button>
+                </div>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </header>
