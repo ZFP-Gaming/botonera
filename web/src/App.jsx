@@ -737,7 +737,7 @@ export default function App() {
                     {filteredFavorites.length} / {favoriteSounds.length}
                   </Badge>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                <CardContent className="favorites-grid grid gap-4">
                   {filteredFavorites.length ? (
                     filteredFavorites.map((sound, idx) => (
                       <button
@@ -784,7 +784,7 @@ export default function App() {
                           }}
                         >
                           <Heart
-                            size={18}
+                            size={14}
                             weight={favorites.includes(sound) ? 'fill' : 'regular'}
                             className="text-pink-200"
                             aria-hidden
@@ -861,7 +861,7 @@ export default function App() {
                       }}
                     >
                       <Heart
-                        size={18}
+                        size={14}
                         weight={favorites.includes(sound) ? 'fill' : 'regular'}
                         className="text-pink-200"
                         aria-hidden
