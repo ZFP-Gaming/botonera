@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CaretDoubleLeft,
   CaretDoubleRight,
+  CaretDown,
   CaretLeft,
   CaretRight,
   Heart,
@@ -111,6 +112,8 @@ export default function App() {
   });
   const socketRef = useRef(null);
   const loginWindowRef = useRef(null);
+  const guildMenuRef = useRef(null);
+  const [guildMenuOpen, setGuildMenuOpen] = useState(false);
 
   const statusLabel = useMemo(() => {
     const currentStatus = selectedGuildId ? statusByGuild[selectedGuildId] : connectionState;
@@ -123,6 +126,11 @@ export default function App() {
   const selectedNowPlaying = useMemo(
     () => (selectedGuildId ? nowPlayingByGuild[selectedGuildId] : null),
     [nowPlayingByGuild, selectedGuildId],
+  );
+
+  const selectedGuild = useMemo(
+    () => guilds.find((guild) => guild.id === selectedGuildId) || null,
+    [guilds, selectedGuildId],
   );
 
   useEffect(() => {
@@ -454,12 +462,40 @@ export default function App() {
     setHistoryPage(1);
   }, [selectedGuildId]);
 
-  const handleGuildChange = (event) => {
-    const nextId = event.target.value;
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (guildMenuRef.current && !guildMenuRef.current.contains(event.target)) {
+        setGuildMenuOpen(false);
+      }
+    };
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setGuildMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!guilds.length) {
+      setGuildMenuOpen(false);
+    }
+  }, [guilds.length]);
+
+  const handleGuildSelect = (nextId) => {
+    if (!nextId) return;
     setSelectedGuildId(nextId);
     localStorage.setItem(SELECTED_GUILD_KEY, nextId);
     setConnectionState(statusByGuild[nextId] || 'disconnected');
     setError(null);
+    setGuildMenuOpen(false);
+  };
+
+  const handleGuildChange = (event) => {
+    handleGuildSelect(event.target.value);
   };
 
   const beginLogin = () => {
@@ -488,6 +524,11 @@ export default function App() {
 
   const avatarUrl = (u) =>
     u?.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=64` : null;
+
+  const guildIconUrl = (guild) =>
+    guild?.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=64` : null;
+
+  const guildInitial = (guild) => (guild?.name?.[0] || guild?.id?.[0] || '?').toUpperCase();
 
   const palette = [
     'ring-1 ring-indigo-400/40 hover:ring-indigo-300/60 shadow-indigo-500/20',
@@ -619,7 +660,7 @@ export default function App() {
         ) : (
           <>
             <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-              <Card className="relative overflow-hidden">
+              <Card className="relative z-40 overflow-visible">
                 <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-cyan-400 to-emerald-400" />
                 <CardHeader className="space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -651,29 +692,117 @@ export default function App() {
                 <CardContent className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="server-select">Servidor de Discord</Label>
-                    <select
-                      id="server-select"
-                      value={selectedGuildId || ''}
-                      onChange={handleGuildChange}
-                      aria-label="Seleccionar servidor"
-                      disabled={!guilds.length}
-                      className="h-11 w-full rounded-lg border border-border bg-background/80 px-3 text-sm font-medium text-foreground shadow-soft outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
-                    >
-                      {guilds.map((guild) => (
-                        <option key={guild.id} value={guild.id}>
-                          {guild.name || guild.id}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative z-30" ref={guildMenuRef}>
+                      <button
+                        type="button"
+                        onClick={() => setGuildMenuOpen((open) => !open)}
+                        disabled={!guilds.length}
+                        aria-expanded={guildMenuOpen}
+                        aria-haspopup="listbox"
+                        className="flex w-full min-h-[86px] items-center gap-3 rounded-xl border border-border bg-slate-900/70 px-3 py-3 text-left text-sm font-medium text-foreground shadow-soft outline-none transition hover:border-primary/50 hover:shadow-lg focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-60"
+                      >
+                        <Avatar className="h-9 w-9 ring-1 ring-white/5">
+                          {guildIconUrl(selectedGuild) ? (
+                            <AvatarImage
+                              src={guildIconUrl(selectedGuild)}
+                              alt={selectedGuild?.name}
+                            />
+                          ) : (
+                            <AvatarFallback>{guildInitial(selectedGuild)}</AvatarFallback>
+                          )}
+                        </Avatar>
+                        <div className="flex flex-1 flex-col text-left">
+                          <span className="text-sm font-semibold leading-tight">
+                            {selectedGuild?.name || 'Selecciona un servidor'}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {guilds.length ? 'Elige dónde reproducir' : 'Sin servidores disponibles'}
+                          </span>
+                        </div>
+                        <CaretDown
+                          size={18}
+                          className={cn(
+                            'text-muted-foreground transition duration-200',
+                            guildMenuOpen ? 'rotate-180 text-primary' : '',
+                          )}
+                          aria-hidden
+                        />
+                      </button>
+                      {guildMenuOpen && (
+                        <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-border/70 bg-slate-900/95 shadow-2xl backdrop-blur">
+                          <ul
+                            className="max-h-64 overflow-auto p-1"
+                            role="listbox"
+                            aria-label="Servidores de Discord"
+                          >
+                            {guilds.length ? (
+                              guilds.map((guild) => {
+                                const active = guild.id === selectedGuildId;
+                                return (
+                                  <li key={guild.id}>
+                                    <button
+                                      type="button"
+                                      className={cn(
+                                        'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                                        active
+                                          ? 'bg-primary/10 text-primary'
+                                          : 'text-foreground hover:bg-slate-800/70',
+                                      )}
+                                      onClick={() => handleGuildSelect(guild.id)}
+                                      role="option"
+                                      aria-selected={active}
+                                    >
+                                      <Avatar className="h-9 w-9 ring-1 ring-white/5">
+                                        {guildIconUrl(guild) ? (
+                                          <AvatarImage src={guildIconUrl(guild)} alt={guild.name} />
+                                        ) : (
+                                          <AvatarFallback>{guildInitial(guild)}</AvatarFallback>
+                                        )}
+                                      </Avatar>
+                                      <div className="flex flex-col">
+                                        <span className="text-sm font-semibold leading-tight">
+                                          {guild.name || guild.id}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                          {active ? 'Seleccionado' : 'Haz clic para conectar'}
+                                        </span>
+                                      </div>
+                                    </button>
+                                  </li>
+                                );
+                              })
+                            ) : (
+                              <li className="px-3 py-3 text-sm text-muted-foreground">
+                                No hay servidores disponibles.
+                              </li>
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                      <select
+                        id="server-select"
+                        value={selectedGuildId || ''}
+                        onChange={handleGuildChange}
+                        className="sr-only"
+                        aria-hidden="true"
+                        tabIndex={-1}
+                      >
+                        {guilds.map((guild) => (
+                          <option key={guild.id} value={guild.id}>
+                            {guild.name || guild.id}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <div className="space-y-2" aria-live="polite">
-                    <Label htmlFor="volume-slider">Volumen</Label>
-                    <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-slate-900/50 px-3 py-3 shadow-soft">
-                      <input
-                        id="volume-slider"
-                        type="range"
-                        min="0"
-                        max="100"
+                    <div className="space-y-2" aria-live="polite">
+                      <Label htmlFor="volume-slider">Volumen</Label>
+                      <div className="flex min-h-[86px] items-center gap-3 rounded-xl border border-border/60 bg-slate-900/50 px-3 py-3 shadow-soft">
+                        <input
+                          id="volume-slider"
+                          type="range"
+                          min="0"
+                          max="100"
                         value={volume}
                         onChange={handleVolumeChange}
                         disabled={volumeDisabled}
