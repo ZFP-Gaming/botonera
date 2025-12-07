@@ -5,12 +5,48 @@ on:
     branches: [master]
 
 jobs:
+  build-web:
+    name: Build web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
+    needs: build-web
     steps:
-      - name: Deploy botonera
-        uses: appleboy/ssh-action@v0.1.4
+      - name: Download web artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: dist
+
+      - name: Update backend and prepare web folder
+        uses: appleboy/ssh-action@v0.1.10
         with:
           host: 45.7.231.47
           username: root
@@ -18,13 +54,17 @@ jobs:
           port: 22222
           script: |
             set -e
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-            [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
             cd botonera
             git pull origin master
             pm2 restart botonera
-            cd web
-            npm run build
             rm -rf /var/www/botonera/*
-            cp -r dist/* /var/www/botonera/
+
+      - name: Upload web dist
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 45.7.231.47
+          username: root
+          key: ${{ secrets.SSH_SECRET }}
+          port: 22222
+          source: "dist/*"
+          target: /var/www/botonera/
