@@ -550,64 +550,66 @@ export default function App() {
           <img src="/botonera.png" alt="Botonera" className="brand-logo" />
         </div>
         <div className="header-row">
-          <div className="status-card">
-            <div className={`status-dot status-${connectionState}`} />
-            <div>
-              <p className="status-label">Estado</p>
-              <p className="status-value">{statusLabel}</p>
-              {selectedNowPlaying && (
-                <p className="now-playing">Reproduciendo: {selectedNowPlaying}</p>
-              )}
-            </div>
-          </div>
-          <div className="server-picker">
-            <label htmlFor="server-select">Servidor de Discord</label>
-            <select
-              id="server-select"
-              value={selectedGuildId || ''}
-              onChange={handleGuildChange}
-              aria-label="Seleccionar servidor"
-              disabled={!guilds.length}
-            >
-              {guilds.map((guild) => (
-                <option key={guild.id} value={guild.id}>
-                  {guild.name || guild.id}
-                </option>
-              ))}
-            </select>
-          </div>
-          {user ? (
-            <div className="user-menu" ref={userMenuRef}>
-              <button
-                type="button"
-                className="user-pill user-trigger"
-                title={user.id}
-                onClick={() => setUserMenuOpen((open) => !open)}
-                aria-expanded={userMenuOpen}
-                aria-haspopup="menu"
-              >
-                {avatarUrl(user) ? (
-                  <img className="avatar-img" src={avatarUrl(user)} alt={user.username} />
-                ) : (
-                  <span className="avatar-fallback">
-                    {user.globalName?.[0] || user.username?.[0] || '?'}
-                  </span>
+          <div className="status-hub">
+            <div className="status-card status-block">
+              <div className={`status-dot status-${connectionState}`} />
+              <div>
+                <p className="status-label">Estado</p>
+                <p className="status-value">{statusLabel}</p>
+                {selectedNowPlaying && (
+                  <p className="now-playing">Reproduciendo: {selectedNowPlaying}</p>
                 )}
-                <div>
-                  <p className="user-label">Conectado</p>
-                  <p className="user-name">{user.globalName || user.username}</p>
-                </div>
-                <span className="chevron" aria-hidden />
-              </button>
-              {userMenuOpen ? (
-                <div className="user-dropdown" role="menu">
-                  <button type="button" role="menuitem" onClick={logout}>
-                    Salir
-                  </button>
-                </div>
-              ) : null}
+              </div>
             </div>
-          ) : null}
+            <div className="status-block server-picker">
+              <label htmlFor="server-select">Servidor de Discord</label>
+              <select
+                id="server-select"
+                value={selectedGuildId || ''}
+                onChange={handleGuildChange}
+                aria-label="Seleccionar servidor"
+                disabled={!guilds.length}
+              >
+                {guilds.map((guild) => (
+                  <option key={guild.id} value={guild.id}>
+                    {guild.name || guild.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {user ? (
+              <div className="status-block user-menu" ref={userMenuRef}>
+                <button
+                  type="button"
+                  className="user-pill user-trigger"
+                  title={user.id}
+                  onClick={() => setUserMenuOpen((open) => !open)}
+                  aria-expanded={userMenuOpen}
+                  aria-haspopup="menu"
+                >
+                  {avatarUrl(user) ? (
+                    <img className="avatar-img" src={avatarUrl(user)} alt={user.username} />
+                  ) : (
+                    <span className="avatar-fallback">
+                      {user.globalName?.[0] || user.username?.[0] || '?'}
+                    </span>
+                  )}
+                  <div>
+                    <p className="user-label">Conectado</p>
+                    <p className="user-name">{user.globalName || user.username}</p>
+                  </div>
+                  <span className="chevron" aria-hidden />
+                </button>
+                {userMenuOpen ? (
+                  <div className="user-dropdown" role="menu">
+                    <button type="button" role="menuitem" onClick={logout}>
+                      Salir
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
 
