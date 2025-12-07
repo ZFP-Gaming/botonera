@@ -27,6 +27,9 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_WS_URL: ${{ vars.VITE_WS_URL }}
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
 
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
