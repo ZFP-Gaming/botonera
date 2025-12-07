@@ -5,6 +5,7 @@ import {
   CaretDown,
   CaretLeft,
   CaretRight,
+  DiscordLogo,
   Heart,
   SignOut,
   SpeakerHigh,
@@ -638,21 +639,31 @@ export default function App() {
         )}
 
         {!user ? (
-          <Card className="overflow-hidden border-dashed border-border/70 bg-card/70 shadow-soft">
-            <CardHeader className="space-y-3">
-              <Badge variant="secondary" className="w-fit">
-                Acceso requerido
-              </Badge>
-              <CardTitle>{authLoading ? 'Restaurando sesión...' : 'Conecta con Discord'}</CardTitle>
-              <CardDescription>
-                Inicia sesión para cargar la botonera y registrar quién reproduce cada sonido.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Guardamos tu sesión en este navegador para que no tengas que reautenticarte cada vez.
-              </p>
-              <Button size="lg" onClick={beginLogin} disabled={authLoading}>
+          <Card className="overflow-hidden border border-white/5 bg-slate-900/70 shadow-soft">
+            <CardContent className="flex flex-col gap-6 px-6 py-7 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-3">
+                <Badge variant="secondary" className="w-fit">
+                  Acceso requerido
+                </Badge>
+                <div className="space-y-1">
+                  <CardTitle className="text-2xl">
+                    {authLoading ? 'Restaurando sesión...' : 'Conecta con Discord'}
+                  </CardTitle>
+                  <CardDescription className="text-base text-foreground">
+                    Entra con tu cuenta para cargar la botonera y usar los sonidos en tu servidor.
+                  </CardDescription>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Guardamos tu sesión en este navegador para que no tengas que reautenticarte.
+                </p>
+              </div>
+              <Button
+                size="lg"
+                className="w-full gap-2 md:w-auto"
+                onClick={beginLogin}
+                disabled={authLoading}
+              >
+                <DiscordLogo size={20} weight="fill" />
                 {authLoading ? 'Verificando...' : 'Conectar con Discord'}
               </Button>
             </CardContent>
