@@ -54,6 +54,10 @@ jobs:
           port: 22222
           script: |
             set -e
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            [ -s "$NVM_DIR/bash_completion" ] && . "$NVM_DIR/bash_completion"
+            export PATH="$NVM_DIR/versions/node/$(ls $NVM_DIR/versions/node | tail -n 1)/bin:$PATH"
             cd botonera
             git pull origin master
             pm2 restart botonera
