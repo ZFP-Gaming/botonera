@@ -5,6 +5,7 @@ import {
   CaretLeft,
   CaretRight,
   Heart,
+  SignOut,
   SpeakerHigh,
 } from '@phosphor-icons/react';
 import { Avatar, AvatarFallback, AvatarImage } from './components/ui/avatar';
@@ -467,7 +468,6 @@ export default function App() {
   };
 
   const logout = () => {
-    setUserMenuOpen(false);
     setSessionToken(null);
     setUser(null);
     localStorage.removeItem(SESSION_TOKEN_KEY);
@@ -497,8 +497,6 @@ export default function App() {
     'ring-1 ring-rose-400/35 hover:ring-rose-300/55 shadow-rose-500/20',
   ];
   const [draggingSound, setDraggingSound] = useState(null);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const userMenuRef = useRef(null);
 
   const handleDragStart = (event, sound) => {
     event.dataTransfer?.setData('text/plain', sound);
@@ -533,16 +531,6 @@ export default function App() {
       setVolume(50);
     }
   }, [user]);
-
-  useEffect(() => {
-    const handler = (event) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
-        setUserMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   const handleVolumeChange = (event) => {
     const next = Number(event.target.value);
@@ -581,7 +569,7 @@ export default function App() {
               <p className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground">Botonera</p>
               <h1 className="text-2xl font-semibold leading-tight sm:text-3xl">Panel de sonidos</h1>
               <p className="text-sm text-muted-foreground">
-                Dispara efectos y controla el bot en tus servidores de Discord.
+                Reproduce efectos y controla el bot en tus servidores de Discord.
               </p>
             </div>
           </div>
@@ -616,7 +604,7 @@ export default function App() {
               </Badge>
               <CardTitle>{authLoading ? 'Restaurando sesión...' : 'Conecta con Discord'}</CardTitle>
               <CardDescription>
-                Inicia sesión para cargar la botonera y registrar quién dispara cada sonido.
+                Inicia sesión para cargar la botonera y registrar quién reproduce cada sonido.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -725,35 +713,14 @@ export default function App() {
                         <p className="text-sm text-muted-foreground">ID: {user.id}</p>
                       </div>
                     </div>
-                    <div className="relative" ref={userMenuRef}>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setUserMenuOpen((open) => !open)}
-                        aria-haspopup="menu"
-                        aria-expanded={userMenuOpen}
-                      >
-                        Menú
-                      </Button>
-                      {userMenuOpen ? (
-                        <div className="absolute right-0 mt-2 w-40 overflow-hidden rounded-lg border border-border bg-popover shadow-xl">
-                          <button
-                            type="button"
-                            className="w-full px-4 py-2 text-left text-sm font-medium text-foreground transition hover:bg-accent hover:text-accent-foreground"
-                            role="menuitem"
-                            onClick={logout}
-                          >
-                            Salir
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
+                    <Button variant="secondary" size="sm" onClick={logout}>
+                      <SignOut size={16} weight="bold" className="mr-2" />
+                      Cerrar sesión
+                    </Button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Badge variant="muted">{guilds.length || 0} servidores</Badge>
                     <Badge variant="muted">{sounds.length} sonidos</Badge>
                     <Badge variant="muted">{favorites.length} favoritos</Badge>
-                    <Badge variant="muted">{history.length} eventos</Badge>
                   </div>
                   <CardDescription>
                     La sesión se guarda localmente. Puedes cerrar sesión en cualquier momento.
@@ -793,15 +760,28 @@ export default function App() {
                             {favoriteKeyBySound[sound]}
                           </span>
                         )}
-                        <button
-                          type="button"
+                        <span
+                          role="button"
+                          tabIndex={0}
                           className="favorite-toggle-btn"
-                          onClick={(e) => toggleFavorite(e, sound)}
+                          aria-pressed={favorites.includes(sound)}
+                          aria-label={
+                            favorites.includes(sound)
+                              ? 'Quitar de favoritos'
+                              : 'Agregar a favoritos'
+                          }
                           title={
                             favorites.includes(sound)
                               ? 'Quitar de favoritos'
                               : 'Agregar a favoritos'
                           }
+                          onClick={(e) => toggleFavorite(e, sound)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              toggleFavorite(e, sound);
+                            }
+                          }}
                         >
                           <Heart
                             size={18}
@@ -814,7 +794,7 @@ export default function App() {
                               ? 'Quitar de favoritos'
                               : 'Agregar a favoritos'}
                           </span>
-                        </button>
+                        </span>
                         <span className="sound-name">{sound.replace(/\.[^/.]+$/, '')}</span>
                       </button>
                     ))
@@ -859,13 +839,26 @@ export default function App() {
                     disabled={connectionState === 'disconnected' || connectionState === 'connecting'}
                     title={sound}
                   >
-                    <button
-                      type="button"
+                    <span
+                      role="button"
+                      tabIndex={0}
                       className="favorite-toggle-btn"
-                      onClick={(e) => toggleFavorite(e, sound)}
+                      aria-pressed={favorites.includes(sound)}
+                      aria-label={
+                        favorites.includes(sound)
+                          ? 'Quitar de favoritos'
+                          : 'Agregar a favoritos'
+                      }
                       title={
                         favorites.includes(sound) ? 'Quitar de favoritos' : 'Agregar a favoritos'
                       }
+                      onClick={(e) => toggleFavorite(e, sound)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleFavorite(e, sound);
+                        }
+                      }}
                     >
                       <Heart
                         size={18}
@@ -878,7 +871,7 @@ export default function App() {
                           ? 'Quitar de favoritos'
                           : 'Agregar a favoritos'}
                       </span>
-                    </button>
+                    </span>
                     <span className="sound-name">{sound.replace(/\.[^/.]+$/, '')}</span>
                   </button>
                 ))}
@@ -954,7 +947,7 @@ export default function App() {
                     Historial
                   </p>
                   <CardTitle className="text-xl font-semibold">Últimas reproducciones</CardTitle>
-                  <CardDescription>Mira quién disparó cada sonido por servidor.</CardDescription>
+                  <CardDescription>Mira quién reprodujo cada sonido por servidor.</CardDescription>
                 </div>
                 <Badge variant="muted">{filteredHistory.length} eventos</Badge>
               </CardHeader>

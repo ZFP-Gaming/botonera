@@ -44,4 +44,4 @@ npm run dev -- --host
 Open the printed URL (default `http://localhost:5173`). Buttons map to files inside `sounds/`; clicking sends `{ type: "play", name: "<file>", token: "<session>" }` over WebSocket. You can override the WS endpoint with `VITE_WS_URL=ws://host:port npm run dev` and the OAuth helper base with `VITE_API_URL=http://host:port`.
 
 ### Controlar varios servidores de Discord
-El bot ahora acepta una lista de servidores/guilds. Configura `DISCORD_GUILD_IDS` con los IDs separados por comas (o deja `DISCORD_GUILD_ID` para un solo servidor). La UI muestra un combo “Servidor de Discord” con los nombres de los guilds donde el bot está presente; el historial y los disparos se filtran por el servidor seleccionado.
+El bot ahora acepta una lista de servidores/guilds. Configura `DISCORD_GUILD_IDS` con los IDs separados por comas (o deja `DISCORD_GUILD_ID` para un solo servidor). La UI muestra un combo “Servidor de Discord” con los nombres de los guilds donde el bot está presente; el historial y las reproducciones se filtran por el servidor seleccionado.
